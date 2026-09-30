@@ -6,10 +6,10 @@ status:
   state: complete
 ---
 
-Tyhp adds generic type parameters to classes, interfaces, traits, enums, structs, functions, and methods. Generics provide compile-time type safety for reusable components without any runtime overhead — they are completely erased from PHP output. Tyhp generics support constraints via extends, default type parameters, and generic import aliases.
+Tyhp adds generic type parameters to classes, interfaces, traits, enums, structs, functions, and methods. Generics provide compile-time type safety for reusable components. Type parameters are erased from PHP signatures. Tyhp generics support constraints via extends, default type parameters, and generic import aliases.
 
 :::note
-Generics are a compile-time-only feature. All generic type parameters, arguments, and constraints are erased from the PHP output. There is zero runtime cost.
+Generic type parameters, arguments, and constraints are erased from PHP signatures. Same-compilation sites that still need the bound type at runtime (`typeof`, generic-typed properties, …) emit Mechanism C factories / Mechanism D binders; everything else is a plain class or function. Every emitted generic class, method, and function still carries `#[\Tyhp\GenericRuntime]` (`erased` + `layouts: [1]`). Foreign compiled-library sites always go through `\Tyhp\Generic::bind`. PHP builtin and overlay tyhpdefs that omit the stamp keep erase / inline emit. `#[\Tyhp\EraseGeneric]` opts a property (or a whole class of properties) out of Mechanism C set checks.
 :::
 
 ## Generic Classes
@@ -22,7 +22,7 @@ A class can declare one or more generic type parameters inside angle brackets af
 class Box<T> {
     private T $value;
 
-    public function __construct(T $value) {
+    public function __construct(T $value): void {
         $this->value = $value;
     }
 
@@ -35,30 +35,41 @@ Box<int> $intBox = new Box<int>(42);
 int $val = $intBox->getValue();  // Type-safe: returns int
 ```
 
+When the expected type of a `new` expression is a unique instantiation of the same generic, the type-argument list may be omitted. `Box<int> $intBox = new Box(42);` and `function make(): Box<string> { return new Box("x"); }` infer `T` from the typed local / return type. Explicit arguments still win; a defaulted parameter still fills in when there is no unique expected instantiation.
+
 ## Compiled PHP Output
 
-Generic type parameters are erased from the PHP output. Unconstrained type parameters become mixed. Constrained type parameters use their constraint type as the PHP type hint.
+Generic type parameters are erased from PHP signatures. Unconstrained type parameters become `mixed`. Constrained type parameters use their constraint type as the PHP type hint.
+
+A generic-typed **property** (including a promoted constructor property) opts the class into runtime tracking (Mechanism C: `HasGenerics`, factory, set checks) unless the property or class carries `#[\Tyhp\EraseGeneric]`. Runtime-use constructs (`typeof(T)`, `default(T)`, `is T`, `new T()`, forwarded type arguments) also force tracking. Mixed mode is allowed: the class stays tracked while opted-out properties skip set checks.
 
 ```php
 <?php
-// PHP output — generic type parameters are erased
+// PHP output — signatures erase; this Box is tracked because it stores T
 declare(strict_types=1);
 
+/**
+ * @template T
+ */
+#[\Tyhp\GenericRuntime(erased: false, factory: "new_Box__tyhpGeneric", layouts: [1])]
 class Box {
-    private mixed $value;
-
-    public function __construct(mixed $value) {
-        $this->value = $value;
-    }
-
-    public function getValue(): mixed {
-        return $this->value;
-    }
+    use \Tyhp\Concerns\HasGenerics;
+    // …
 }
 
-$intBox = new Box(42);
-$val = $intBox->getValue();
+$intBox = \Box::new_Box__tyhpGeneric(\Tyhp\Type::int(), 42);
 ```
+
+From **another compilation** (a vendor `package.tyhpdef` that stamps `GenericRuntime`), Tyhp emits `\Tyhp\Generic::bind` instead of baking the factory name:
+
+```php
+$intBox = \Tyhp\Generic::bind(\Vendor\Box::class, \Tyhp\Type::int())(42);
+$result = \Tyhp\Generic::bind($h->identity(...), \Tyhp\Type::string())($value);
+```
+
+PHP builtin and overlay generics that omit the stamp stay erased / inlined. Same-compilation erased classes (no remaining runtime use and no remaining generic-typed properties) emit a plain `new` / plain call, still stamped `erased: true`.
+
+`#[\Tyhp\EraseGeneric]` is compile-only (`#[\Tyhp\NoEmit]`). It is legal on a class, a property, or a promoted constructor parameter. On a method or function it is an error. The attribute is not inherited; a tracked child of an erased generic parent does not call `parent::__initGenerics__`.
 
 ## Generic Interfaces
 
@@ -246,13 +257,12 @@ Generic type parameters can have default types, specified with = after the optio
 ```tyhp
 <?tyhp
 
-// Promise defaults TReturn to void — the common case for async procedures
-class Promise<TReturn extends void|mixed = void> {
+// Promise defaults TReturn to mixed (runtime: tyhp/async)
+class Promise<TReturn extends void|mixed = mixed> {
     // ...
 }
 
-// All equivalent — TReturn defaults to void
-Promise $p1 = new Promise();
+Promise $p1 = new Promise();            // TReturn = mixed
 Promise<void> $p2 = new Promise<void>();
 
 // Override the default
@@ -293,14 +303,14 @@ class Counter<T extends Countable = array> {
     // ...
 }
 
-// ERROR: TYHP4061 — string does not implement Countable
+// ERROR: TYHP4310 — string does not implement Countable
 // class BadCounter<T extends Countable = string> {
 //     ...
 // }
 ```
 
 :::warning
-Error TYHP4061 (CheckerGenericDefaultDoesNotSatisfyConstraint): "Default type 'string' does not satisfy constraint 'Countable' on generic parameter 'T'"
+Error TYHP4310 (CheckerGenericDefaultDoesNotSatisfyConstraint): "Default type 'string' does not satisfy constraint 'Countable' on generic parameter 'T'"
 :::
 
 ## Trailing Rule for Defaults
@@ -315,12 +325,12 @@ class Valid<T, U = int> {}
 class AlsoValid<T, U = int, V = string> {}
 class AllDefaults<T = mixed> {}
 
-// ERROR: TYHP4062 — U has no default but follows T which has one
+// ERROR: TYHP4311 — U has no default but follows T which has one
 // class Invalid<T = int, U> {}
 ```
 
 :::danger
-Error TYHP4062 (CheckerGenericNonDefaultAfterDefault): "Generic parameter 'U' without a default cannot follow parameter 'T' which has a default"
+Error TYHP4311 (CheckerGenericNonDefaultAfterDefault): "Generic parameter 'U' without a default cannot follow parameter 'T' which has a default"
 :::
 
 ## Type Inference Priority Over Defaults
@@ -451,7 +461,7 @@ Use constraints (extends) to limit type parameters to types that support the ope
 :::
 
 :::tip
-Use defaults on type parameters when there is a sensible common case (e.g., Promise<T = void>). This reduces boilerplate for callers.
+Use defaults on type parameters when there is a sensible common case (e.g., `Promise<TReturn extends void|mixed = mixed>`). This reduces boilerplate for callers.
 :::
 
 :::tip
@@ -465,15 +475,15 @@ Use meaningful generic parameter names: T for a single general type, TKey/TValue
 ## Common Mistakes
 
 :::danger
-Don't rely on generics at runtime — they are erased from PHP output and exist only at compile time. There is no runtime type checking of generic parameters.
+Don't treat erased type parameters as a PHP runtime API — they are stripped from signatures. From hand-written PHP and from Tyhp that consumes a **foreign** compiled library, construct or call generics with `\Tyhp\Generic::bind`. Same-compilation Tyhp still emits the factory or binder directly when the class or callable is tracked.
 :::
 
 :::danger
-Don't place a non-defaulted type parameter after a defaulted one — this produces error TYHP4062.
+Don't place a non-defaulted type parameter after a defaulted one — this produces error TYHP4311.
 :::
 
 :::danger
-Don't specify a default type that does not satisfy the constraint — this produces error TYHP4061.
+Don't specify a default type that does not satisfy the constraint — this produces error TYHP4310.
 :::
 
 :::danger
@@ -481,5 +491,5 @@ Don't over-use generics for types that are naturally a single concrete type — 
 :::
 
 :::danger
-Don't create self-referencing defaults (e.g., <T = T>) — this is a circular reference error.
+Don't create self-referencing defaults (e.g., <T = T>) — this is circular-reference error TYHP4312.
 :::

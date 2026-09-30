@@ -31,7 +31,7 @@ if (\is_string($myVar)) {
 
 ## Built-in Type Guards
 
-PHP's built-in type checking functions act as type guards in Tyhp. When used in a conditional check, they narrow the type of the checked variable.
+PHP's built-in type checking functions act as type guards in Tyhp because their php-package tyhpdefs declare type-guard returns. When used in a conditional check, they narrow the type of the checked variable.
 
 - `\is_string($val)` -- narrows to `string`
 - `\is_int($val)` -- narrows to `int`
@@ -46,16 +46,24 @@ PHP's built-in type checking functions act as type guards in Tyhp. When used in 
 
 ## The `instanceof` and `is` Keywords
 
-Tyhp supports `instanceof` from PHP and adds several aliases. The following keywords are all equivalent and can be used interchangeably as type guard expressions:
+Tyhp supports `instanceof` from PHP and `is` as a Tyhp alias. They are equivalent type-guard expressions:
 
 - `instanceof` -- the standard PHP keyword
 - `is` -- Tyhp alias
-- `isa` -- Tyhp alias (reads naturally: "$x isa Foo")
-- `isan` -- Tyhp alias (reads naturally: "$x isan Iterator")
-- `is_a` -- Tyhp alias (with underscore)
-- `is_an` -- Tyhp alias (with underscore)
 
-All of these check if a value is an instance of a specific class or interface (or a descendant of that type) and narrow the variable's type accordingly. They are defined in the lexer as the `T_TYHP_IS` token and are only available in Tyhp mode. For scalar types, the `is` keyword compiles to the appropriate type check function. For object types, it compiles to `instanceof`.
+Both check if a value is an instance of a specific class or interface (or a descendant of that type) and narrow the variable's type accordingly. `is` is the `T_TYHP_IS` token and is only available in Tyhp mode. Emit follows `#[\Tyhp\NativeTypeTest]` on a type-guard function or concrete static method: `$x is string` becomes `\is_string($x)` when `is_string` is marked that way. Unmarked class / interface / enum / trait names still emit native `$x instanceof Fqn`. Unions, nullables, structs, object-shape aliases, generic parameters, and other unmarked types emit `\Tyhp\Type::is`. `$x is null` is allowed and uses `\is_null($x)` when that function is marked. `\is_a(...)` is PHP's function; it is not the `is` operator.
+
+When the right-hand side is an object-shape alias, `$x is ClockShape` / `$x instanceof ClockShape` is a **shape guard**. After a pass, `$x` is narrowed to that shape. The check is existence-only at runtime (public methods and properties listed on the shape). `$x is ClockShape` does not make `$x->__construct()` legal. `$x is User` when `User` is a real class still emits native `instanceof`.
+
+```tyhp
+<?tyhp
+
+function fromObject(object $obj): void {
+    if ($obj is ClockShape) {
+        formatNow($obj);
+    }
+}
+```
 
 ```tyhp
 <?tyhp
@@ -74,21 +82,23 @@ if ($builder instanceof BuilderInterface) {
     $builder->build();
 }
 
-// 'is' keyword works the same as instanceof
+// 'is' keyword works the same as instanceof for objects
 if ($builder is ConnectionInterface) {
     // $builder is narrowed to ConnectionInterface
     $builder->disconnect();
 }
 
-// Natural English-like syntax
-if ($builder isa BuilderInterface) {
-    $builder->build();
+// Scalars use `is` too — emit is `\is_string($value)` / `\is_int($value)` when those
+// tyhpdef functions carry `#[\Tyhp\NativeTypeTest]`
+mixed $value = \getMixedValue();
+if ($value is int) {
+    // $value is narrowed to int
 }
 ```
 
 ## Null Checks as Type Guards
 
-Null comparisons also act as type guards. Checking `!== null`, `=== null`, or `!\is_null()` narrows nullable types:
+Null comparisons also act as type guards. Checking `!== null`, `=== null`, `$x is null`, or `!\is_null()` narrows nullable types:
 
 ```tyhp
 <?tyhp
@@ -126,12 +136,14 @@ if (\is_string($value)) {
 
 ## Narrowing Through Logical Operators
 
-Type narrowing compounds through `&&` (AND) and distributes through `||` (OR) operators:
+Type narrowing compounds through `&&` (AND) and distributes through `||` (OR) operators. Later operands are type-checked the way PHP short-circuits: after a true `&&` left operand, and after a false `||` left operand.
 
 ```tyhp
 <?tyhp
 
 string|int|null $val = \getData();
+string $name = \getClassName();
+\__ClassName $base = \getBaseClassName();
 
 // AND narrows cumulatively
 if ($val !== null && \is_string($val)) {
@@ -142,11 +154,16 @@ if ($val !== null && \is_string($val)) {
 if (\is_string($val) || \is_int($val)) {
     // $val is `string|int`
 }
+
+// A failed `||` operand's negation applies to later operands in the same condition
+if (!\class_exists($name) || !\is_subclass_of($name, $base)) {
+    // `\is_subclass_of` sees `$name` as `__ClassName` because `class_exists` was true
+}
 ```
 
 ## Custom Type Guard Functions
 
-You can define your own type guard functions using a special return type syntax. Instead of returning `bool`, the return type declares which parameter is narrowed to which type using the syntax: `$paramName is TypeExpr` or `$paramName instanceof TypeExpr`.
+You can define your own type guard functions using a special return type syntax. Instead of returning `bool`, the return type declares which subject is narrowed to which type using `$paramName is TypeExpr`, `$paramName instanceof TypeExpr`, or an index read `$array[$key] is TypeExpr`.
 
 ```tyhp
 <?tyhp
@@ -167,7 +184,7 @@ if (isNonEmptyArray($val)) {
 }
 ```
 
-The guard return type syntax is defined in the grammar's `returnTypeGrammarAddon` rule. You can use any of the `is`/`instanceof` variants in the return type declaration.
+The guard return type syntax is defined in the grammar's `returnTypeGrammarAddon` rule. You can use any of the `is`/`instanceof` variants in the return type declaration. The subject may be a parameter or one index read of a parameter (`$array[$key]`, `$array[0]`, `$array['k']`). At a call site, those parameter names are substituted for the arguments, so `hasStringAt($k, $arr)` narrows `$arr[$k]`.
 
 ```tyhp
 <?tyhp
@@ -186,6 +203,20 @@ function isStringOrInt(mixed $val): $val is string|int {
 function isPositiveInt(mixed $val): $val is int {
     return \is_int($val) && $val > 0;
 }
+
+// Guard that narrows an index read, not the array itself
+function hasStringAt(int $key, array $array): $array[$key] is string {
+    return \array_key_exists($key, $array) && \is_string($array[$key]);
+}
+
+function demo(array $arr, int $k): void {
+    if (hasStringAt(0, $arr)) {
+        string $first = $arr[0];
+    }
+    if (hasStringAt($k, $arr)) {
+        string $value = $arr[$k];
+    }
+}
 ```
 
 ## Dynamic Guard Functions
@@ -193,16 +224,13 @@ function isPositiveInt(mixed $val): $val is int {
 PHP's symbol existence functions also act as type guards, narrowing string values to Tyhp's symbol name types. This enables type-safe dynamic programming:
 
 - `\function_exists($name)` -- narrows `$name` to `__FunctionName`
-- `\class_exists($name)` -- narrows `$name` to `__ClassName<object>` (omit `<T>`; use `\class_exists<Foo>($name)` for `__ClassName<Foo>`)
-- `\function_exists($name)` -- narrows `$name` to `__FunctionName`
-- `\interface_exists($name)` / `\trait_exists($name)` / `\enum_exists($name)` -- same pattern with `__InterfaceName` / `__TraitName` / `__EnumName`
+- `\class_exists($name)` -- narrows `$name` to `__ClassName<object>` (omit `<T>`; use `\class_exists<Foo>($name)` for `__ClassName<Foo>`, or `\class_exists<ClockShape>($name)` / `\class_exists<__New<ClockShape>>($name)` for a shape brand)
 - `\interface_exists($name)` -- narrows `$name` to `__InterfaceName`
 - `\trait_exists($name)` -- narrows `$name` to `__TraitName`
 - `\enum_exists($name)` -- narrows `$name` to `__EnumName`
 - `\property_exists($obj, $name)` -- narrows `$name` to `__PropertyName<typeof($obj)>`
 - `\method_exists($obj, $name)` -- narrows `$name` to `__MethodName<typeof($obj)>`
-- `isset($$varName)` -- narrows `$varName` to `__VarName`
-- `variable_exists($name)` -- narrows `$name` to `__VarName`
+- `variable_exists($count)` / `variable_exists('count')` -- narrows the name to `__VarName`
 
 ## Early Return Narrowing
 
@@ -302,7 +330,7 @@ function isPositiveInt(mixed $val): bool {
 }
 ```
 
-The `is` keyword compiles to `instanceof` for object types:
+The `is` keyword compiles the same way as `instanceof`. When a free function or concrete static method marked `#[\Tyhp\NativeTypeTest]` tests for exact `T` (`function is_string(mixed $value): $value is string`), `$x is T` emits a call to that callable. Otherwise a resolved class, interface, enum, or trait emits native `instanceof`. Remaining forms (unions, `?T`, structs, generic parameters, unmarked aliases) emit `\Tyhp\Type::is`:
 
 ```tyhp
 <?tyhp
@@ -310,6 +338,12 @@ The `is` keyword compiles to `instanceof` for object types:
 function checkBuilder(object $obj): void {
     if ($obj is BuilderInterface) {
         $obj->build();
+    }
+}
+
+function checkInt(mixed $n): void {
+    if ($n is int) {
+        echo $n;
     }
 }
 ```
@@ -323,6 +357,12 @@ declare(strict_types=1);
 function checkBuilder(object $obj): void {
     if ($obj instanceof BuilderInterface) {
         $obj->build();
+    }
+}
+
+function checkInt(mixed $n): void {
+    if (\is_int($n)) {
+        echo $n;
     }
 }
 ```
@@ -403,7 +443,7 @@ if ($user !== null) {
 - Type narrowing is scope-sensitive -- it only applies within the guarded block.
 - Assigning a value of a different type within a narrowed scope ends the current narrowing and starts a new one based on the assigned type.
 - Early returns, throws, continues, and breaks narrow the type for the remaining code after them.
-- The narrowed type can only be one of the types in the original union type -- narrowing never introduces new types.
+- The narrowed type is usually one of the types in the original union — except a shape guard, which refines `object` / `mixed` (or a union containing them) to the object-shape alias.
 - Outside of the guarded scope, the variable reverts to its full declared type.
 - Multiple guards compound: after checking `!== null` and then `is Foo`, the type is `Foo`.
 - Custom type guard functions must actually return a boolean value at runtime -- the guard return type only tells the compiler about the narrowing effect.

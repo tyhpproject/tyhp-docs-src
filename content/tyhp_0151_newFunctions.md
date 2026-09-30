@@ -6,7 +6,7 @@ status:
   state: complete
 ---
 
-Tyhp introduces new functions, changes the behavior of some existing PHP functions, and gives many built-in functions generic type signatures for better type safety. This page covers guard functions, generic built-in function signatures, compile-time functions, and scalar pseudo-object methods.
+Tyhp introduces new functions, changes the behavior of some existing PHP functions, and gives many built-in functions generic type signatures for better type safety. This page covers guard functions, generic built-in function signatures, compile-time functions, and user-defined extension methods.
 
 ## Guard / Type Narrowing Functions
 
@@ -55,9 +55,10 @@ These PHP reflection/existence functions act as type guards that narrow string v
 - `\enum_exists($name)` -- narrows `$name` to `__EnumName`
 - `\property_exists($obj, $name)` -- narrows `$name` to `__PropertyName<typeof($obj)>`
 - `\method_exists($obj, $name)` -- narrows `$name` to `__MethodName<typeof($obj)>`
-- `\is_a($obj, $className)` -- narrows `$className` to `__CompatibleTypeName<typeof($obj)>`
 - `\is_subclass_of($obj, $className)` -- narrows `$className` to `__CompatibleTypeName<typeof($obj)>`
-- `isset($$varName)` -- narrows `$varName` to `__VarName`
+- `variable_exists($count)` / `variable_exists('count')` -- narrows the name to `__VarName`
+
+`is` is a keyword (an `instanceof` alias), not a `\is_a(...)` function call. `$$var` is prohibited (TYHP4133); do not write `isset($$varName)`.
 
 ```tyhp
 <?tyhp
@@ -78,22 +79,16 @@ Many PHP built-in functions are given generic type signatures in Tyhp. This mean
 
 ## Array Functions
 
-- `\array_map<T, U>(callable<T, U> $callback, array<T> $array): array<U>`
-- `\array_filter<T>(array<T> $array, ?callable<T, bool> $callback = null): array<T>`
-- `\array_keys<TKey, TValue>(array<TKey, TValue> $array): array<TKey>`
-- `\array_values<T>(array<T> $array): array<T>`
-- `\array_merge<T>(array<T> ...$arrays): array<T>`
-- `\array_unique<T>(array<T> $array): array<T>`
-- `\array_reverse<T>(array<T> $array): array<T>`
-- `\array_slice<T>(array<T> $array, int $offset, ?int $length = null): array<T>`
-- `\array_pop<T>(array<T> &$array): ?T`
-- `\array_shift<T>(array<T> &$array): ?T`
-- `\array_push<T>(array<T> &$array, T ...$values): int`
-- `\array_column<TKey, TValue>(array<array<TKey, TValue>> $array, TKey $columnKey): array<TValue>`
-- `\array_combine<TKey, TValue>(array<TKey> $keys, array<TValue> $values): array<TKey, TValue>`
-- `\array_chunk<T>(array<T> $array, int $length): array<array<T>>`
-- `\array_reduce<T, U>(array<T> $array, callable<U, T, U> $callback, U $initial): U`
-- `\array_walk<TKey, TValue>(array<TKey, TValue> &$array, callable<TValue, TKey, void> $callback): bool`
+Signatures come from the shipped PHP tyhpdefs. Some functions are generic; many are not. Do not assume a generic form unless the tyhpdef declares it.
+
+- `\array_map<TValue = mixed, TResult extends void|never|mixed = mixed>(?callable(TValue): TResult $callback, array<TValue> $array, array ...$arrays): array<TResult>`
+- `\array_values<TKey extends int|string, TValue = mixed>(array<TKey, TValue> $array): array<int, TValue>`
+- `\array_reverse<TKey extends int|string = int|string, TValue = mixed>(array<TKey, TValue> $array, bool $preserve_keys = false): array<TKey, TValue>`
+- `\array_pop(array &$array): mixed` — not generic
+- `\array_shift(array &$array): mixed` — not generic
+- `\array_filter(array $array, ?callable $callback = null, int $mode = 0): array` — not generic
+- `\array_keys(array $array, mixed $filter_value = null, bool $strict = false): array` — not generic
+- `\array_merge(array ...$arrays): array` — not generic
 
 ```tyhp
 <?tyhp
@@ -168,20 +163,23 @@ function validate(string $field, mixed $value): void {
 validate('email', $emailInput);
 ```
 
-## `typeof(expr)`
+## `typeof(Type)`
 
-Returns a `\Tyhp\Type` instance representing the type of the given expression at compile time. For class/interface names, it resolves to the fully-qualified class name string. This is useful for runtime type reflection with compile-time safety.
+Returns a `\Tyhp\Type` instance for a type expression. Scalars emit `\Tyhp\Type::int()` / `::string()` / etc. Declared classes emit `\Tyhp\Type::fromClassName(...)`. Structs emit `\Tyhp\Type::struct(...)` with the property schema. Source type aliases emit a factory call (`UserId()`, `Optional(\Tyhp\Type::int())`). `\Tyhp\Type::of($value)` is a **runtime** helper that inspects a value — it is not what `typeof()` compiles to.
 
 ```tyhp
 <?tyhp
 
 use App\Models\User;
+use App\Types\UserId;
+use App\Types\Optional;
 
-string $name = "Alice";
-\Tyhp\Type $type = typeof($name);    // \Tyhp\Type::_string()
-
-// typeof on a class name resolves to the FQCN string
-string $fqcn = typeof(User);           // 'App\\Models\\User'
+\Tyhp\Type $type = typeof(string);
+\Tyhp\Type $userType = typeof(User);
+\Tyhp\Type $unionType = typeof(int|string);
+\Tyhp\Type $idType = typeof(UserId);
+\Tyhp\Type $optType = typeof(Optional<int>);
+\Tyhp\Type $also = Optional(typeof(int));
 ```
 
 Compiles to:
@@ -192,11 +190,18 @@ declare(strict_types=1);
 
 use App\Models\User;
 
-$name = "Alice";
-$type = \Tyhp\Type::_string();
+use function App\Types\Optional;
+use function App\Types\UserId;
 
-$fqcn = 'App\\Models\\User';
+$type = \Tyhp\Type::string();
+$userType = \Tyhp\Type::fromClassName(User::class);
+$unionType = \Tyhp\Type::union(\Tyhp\Type::int(), \Tyhp\Type::string());
+$idType = UserId();
+$optType = Optional(\Tyhp\Type::int());
+$also = Optional(\Tyhp\Type::int());
 ```
+
+`typeof(Optional<int>)` and `Optional(typeof(int))` are the two ways to get a Type value for a generic alias. `Optional<int>()` is invalid. PHP writes `Optional(\Tyhp\Type::int())`.
 
 ## `default(Type)`
 
@@ -208,6 +213,7 @@ Returns the default value for a given type at compile time. The argument must be
 - `default(bool)` returns `false`
 - `default(array)` returns `[]`
 - `default(?T)` returns `null` for any nullable type
+- `default(ClassName)` for a non-scalar / object type returns `null`. Assigning that to a non-nullable target is a type error; use `?User $u = default(User)` (or another nullable type).
 
 ```tyhp
 <?tyhp
@@ -217,6 +223,8 @@ string $text = default(string);   // ""
 bool $flag = default(bool);       // false
 array $items = default(array);    // []
 ?string $opt = default(?string);  // null
+?User $user = default(User);      // null — non-scalars default to null
+// User $bad = default(User);     // ERROR: null is not assignable to non-nullable User
 ```
 
 Compiles to:
@@ -230,25 +238,41 @@ $text = '';
 $flag = false;
 $items = [];
 $opt = null;
+$user = null;
 ```
 
 ## `variable_exists(expr)`
 
-Checks whether a variable with the given name exists in the current scope. Unlike `isset()`, `variable_exists()` checks for the variable's existence without checking its value -- a variable that exists but holds `null` still returns `true`. It acts as a type guard, narrowing the variable name to `__VarName`.
+Checks whether a variable exists in the current scope. The argument is the variable itself or a string literal: `variable_exists($count)` or `variable_exists('count')`. Unlike `isset()`, `variable_exists()` is about existence, not the value — a declared variable that holds `null` still counts as existing. When the compiler cannot fold the check to a boolean literal, it emits `\array_key_exists('name', \get_defined_vars())`, not `isset()`. It can narrow a name to `__VarName`. `$$var` is prohibited (TYHP4133).
 
 ```tyhp
 <?tyhp
 
-string $varName = "myVar";
+int $count = 0;
 
-if (variable_exists($varName)) {
-    // $varName is narrowed to __VarName
-    // The variable named by $varName is known to exist in scope
+if (variable_exists($count)) {
+    // $count is declared in this scope
+}
+
+if (variable_exists('count')) {
+    // same check using a string literal name
 }
 
 // Difference from isset():
 // isset() returns false for variables that are null
 // variable_exists() returns true as long as the variable is declared
+```
+
+Compiles to (when not folded):
+
+```php
+<?php
+declare(strict_types=1);
+
+$count = 0;
+
+if (\array_key_exists('count', \get_defined_vars())) {
+}
 ```
 
 :::note
@@ -259,18 +283,21 @@ if (variable_exists($varName)) {
 All four compile-time functions (`nameof`, `typeof`, `default`, `variable_exists`) have dedicated lexer tokens and grammar rules in the Tyhp parser. They are parsed as internal functions and are only available in Tyhp mode.
 :::
 
-## Extension Methods (Scalar Pseudo-Object Methods)
+## Extension Methods
 
-Tyhp provides built-in extension methods on scalar types (`string`, `int`, `float`, `bool`, `array`) that allow calling methods directly on scalar values using object syntax. These compile to standard PHP function calls in the output. See the dedicated Scalar Pseudo-Objects documentation page for the full list of available methods.
+Tyhp lets you declare `extension` types that add methods to existing types, including scalars. The target is on the extension (`extension StringHelpers extends string`), and `$this` inside the member is that target. See Scalar Pseudo-Objects and Extensions for the full syntax.
 
 ```tyhp
 <?tyhp
 
-string $name = "alice";
-string $upper = $name->toUpper();  // Compiles to: \strtoupper($name)
+extension StringHelpers extends string {
+    function toCamelCase(): string {
+        return $this;
+    }
+}
 
-array<int> $numbers = [3, 1, 4, 1, 5];
-int $count = $numbers->count();    // Compiles to: \count($numbers)
+string $name = "hello_world";
+string $camel = $name->toCamelCase();
 ```
 
 Compiles to:
@@ -279,11 +306,44 @@ Compiles to:
 <?php
 declare(strict_types=1);
 
-$name = 'alice';
-$upper = \strtoupper($name);
+$name = 'hello_world';
+$camel = \StringHelpers::toCamelCase($name);
+```
 
-$numbers = [3, 1, 4, 1, 5];
-$count = \count($numbers);
+## Built-in Scalar Methods
+
+```status
+tier: 2
+story: '21'
+state: complete
+```
+
+`tyhp/core` attaches methods on `string`, `array`, `int`, `float`, `bool`, and `\Closure` via `global use extension \Tyhp\StringExtensions` (and the matching catalogs). No per-file `use extension` is required. `$name->toUpper()` emits `\Tyhp\StringHelper::strtoupper($name)`, which uses `\mb_strtoupper` when mbstring is loaded. See [Scalar Pseudo-Objects](tyhp_1000_scalarPseudoObjects.md).
+
+## `\Tyhp\Json::decode<T>`
+
+`tyhp/core` also ships `\Tyhp\Json::decode<T>(string $json): T` and `\Tyhp\Json::tryDecode<T>(string $json, T &$out): bool`. Both always decode JSON objects as associative arrays. `decode` throws `\JsonException` on invalid JSON and `\Tyhp\Exceptions\IncompatibleTypeException` when the value does not match `T`. `tryDecode` writes `$out` and returns `true` on success, or leaves `$out` unchanged and returns `false` for those failures. `\json_decode` stays a PHP builtin whose Layer 3 overlay returns `JsonAssoc` / `JsonObject` (or those plus `null`) from `$associative` and `JSON_THROW_ON_ERROR` literals.
+
+```tyhp
+<?tyhp
+
+type User = struct {
+    string $name;
+    int $age;
+};
+
+User $user = \Tyhp\Json::decode<User>('{"name":"Ann","age":30}');
+User $fromString = $json->jsonDecodeAs<User>();
+
+User $maybe;
+if (\Tyhp\Json::tryDecode<User>('{"name":"Ann","age":30}', $maybe)) {
+    // $maybe is User
+}
+
+User $maybeFromString;
+if ($json->jsonTryDecodeAs<User>($maybeFromString)) {
+    // $maybeFromString is User
+}
 ```
 
 ## Best Practices
@@ -297,7 +357,7 @@ Use `nameof()` instead of hardcoded name strings for variables, properties, and 
 :::
 
 :::tip
-Use `typeof()` instead of hardcoded class name strings when you need the FQCN of a type. This keeps your code safe from namespace or rename changes.
+Use `typeof()` when you need a `\Tyhp\Type` value for a type (`typeof(int)`, `typeof(UserId)`, `typeof(Optional<int>)`). For a class-name string, use `nameof(User)` or `User::class`. To inspect a value, use `\Tyhp\Type::of($value)`.
 :::
 
 :::tip
@@ -333,13 +393,12 @@ Don't confuse `variable_exists()` with `isset()`. `isset()` returns `false` for 
 
 string|int $value = getValue();
 
-// ERROR: Method 'toUpper' does not exist on type 'int'
-// Must narrow first:
-// $value->toUpper();
+// ERROR: cannot pass string|int to a string-only function without narrowing
+// $length = \strlen($value);
 
 // Correct approach: narrow with a type guard
 if (\is_string($value)) {
-    string $upper = $value->toUpper();  // OK: $value is narrowed to string
+    string $upper = \strtoupper($value);  // OK: $value is narrowed to string
 }
 ```
 

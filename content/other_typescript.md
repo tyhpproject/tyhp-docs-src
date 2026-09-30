@@ -2,17 +2,17 @@
 title: TypeScript
 ---
 
-TypeScript is the closest analogy to what Tyhp does and serves as a direct inspiration for the project. TypeScript adds a type system on top of JavaScript and compiles to standard JavaScript. Tyhp does the same for PHP. The relationship can be expressed as: TypeScript is to JavaScript what Tyhp is to PHP.
+TypeScript is the closest analogy to what Tyhp does and a direct inspiration for the project. TypeScript is a typed superset of JavaScript that compiles to JavaScript. Tyhp is a typed superset of the PHP language that compiles to PHP. TypeScript is not JavaScript; Tyhp is not PHP.
 
 ## What TypeScript Is
 
-TypeScript is a strongly-typed superset of JavaScript developed by Microsoft. It adds static type checking, interfaces, generics, type inference, and other type system features to JavaScript. TypeScript compiles (transpiles) to standard JavaScript, erasing all type information at compile time. Since its introduction in 2012, TypeScript has become one of the most widely adopted programming languages, demonstrating that a typed superset approach can succeed at massive scale.
+TypeScript is a typed superset of JavaScript developed by Microsoft. It adds static type checking, interfaces, generics, type inference, and other type system features to JavaScript. TypeScript compiles (transpiles) to standard JavaScript, erasing all type information at compile time. Since its introduction in 2012, TypeScript has become one of the most widely adopted programming languages, demonstrating that a typed superset approach can succeed at massive scale.
 
 ## Similarities
 
 Tyhp follows the TypeScript model closely in philosophy and approach:
 
-- Both are strongly-typed supersets of a dynamically-typed language
+- Both are typed supersets of a dynamically typed language
 - Both transpile to the original language — TypeScript to JavaScript, Tyhp to PHP
 - Both erase generic type information at compile time (type erasure)
 - Both support generics with type parameters and constraints
@@ -21,7 +21,7 @@ Tyhp follows the TypeScript model closely in philosophy and approach:
 - Both aim to produce readable, idiomatic output code
 - Both allow gradual adoption in existing codebases
 - Both use declaration files for describing external libraries (TypeScript uses .d.ts files, Tyhp uses Tyhpdef files)
-- TypeScript ships a mature Language Server; Tyhp's LSP is planned (Story 19) and is not in this alpha.
+- TypeScript ships a mature Language Server; Tyhp provides `tyhp language_server` (LSP over stdin/stdout) and the Tyhp Language editor clients.
 
 ## Differences
 
@@ -37,4 +37,4 @@ While Tyhp follows the TypeScript model, the differences between PHP and JavaScr
 
 ## The TypeScript Model
 
-TypeScript's success has proven that a typed superset approach works. It demonstrated that developers will adopt gradual typing when the tooling is good, the migration path is smooth, and the output code is readable. Tyhp aims to bring these same benefits to the PHP ecosystem — not by copying TypeScript feature-for-feature, but by applying the same philosophy to PHP's unique strengths and constraints.
+TypeScript showed that a typed-superset approach can work when the tooling is usable, the migration path is gradual, and the output is readable. Tyhp applies that model to PHP’s runtime and ecosystem, not a feature-for-feature copy of TypeScript.

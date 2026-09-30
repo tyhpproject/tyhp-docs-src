@@ -6,7 +6,7 @@ status:
   state: complete
 ---
 
-Tyhp allows you to define custom behavior for operators on classes and enums. Operator overloads enable intuitive syntax like $a + $b where $a and $b are object instances. The compiler rewrites operator usage into method calls in the PHP output. Operator overloads can only be defined on classes and enums — not on traits, interfaces, or structs.
+Tyhp allows you to define custom behavior for operators on classes, enums, traits, and interfaces. Operator overloads enable intuitive syntax like $a + $b where $a and $b are object instances. The compiler rewrites operator usage into method calls in the PHP output. Operator overloads can be declared on classes, enums, traits, and interfaces (the same class statement list). Structs cannot declare operators — struct bodies are properties only. Trait methods that use an operator on `$this` emit `static::__add` (and the matching `__*` name) so the composing class's overload late-binds.
 
 :::note
 Every operator overload compiles to a STATIC method, with a single exception: convert's to-form __to{T}() is an INSTANCE method so it can satisfy PHP's \Stringable and the \Tyhp\Contracts\*Convertible instance interfaces. Multiple forms of the same operator collapse into ONE method whose operands and return use union types; that method dispatches internally on the runtime operand types and throws \Tyhp\Exceptions\InvalidParametersForOperatorOverloadException for a combination no form accepts. The generated method name is reserved — declaring an operator forbids a hand-written method of the same name.
@@ -120,8 +120,52 @@ $e = \Money::__add(100, $a);
 
 **Tyhpdef native passthrough:** a bodyless `operator +(…): T;` (no `extension` keyword) on a
 tyhpdef class means the PHP type already supports the operator. Call sites keep the PHP operator —
-they are **not** rewritten to `__add`. Mapped overloads use `extension operator` with a required
-body; see [Tyhpdef classes — Operator Overloads](tyhpdef_classes.md#operator-overloads).
+they are **not** rewritten to `__add`. See [Tyhpdef classes — Operators](tyhpdef_classes.md#operators).
+Mapped overloads use `extension operator` with a required `=>` expression; see
+[Extensions in Tyhpdef](tyhpdef_extensions.md#native-vs-mapped-operators).
+
+## Extension operators
+
+An operator inside `extension Name { }` takes its target from the block. List every operand. `self` is that target, including a scalar. `int + Money` is `operator + (int $left, self $right)` on an extension whose target is `Money`.
+
+```tyhp
+<?tyhp
+
+extension MoneyOps extends \App\Money {
+    operator + (self $left, self $right): self {
+        return $left->plus($right);
+    }
+
+    operator + (int $left, self $right): self => $right;
+}
+```
+
+Class, enum, trait, and interface operators stay on that type: `self` is the enclosing type. Tyhpdef class-body `extension operator` is the same: `self` is the enclosing class. See [Extensions](tyhp_2100_extensions.md).
+
+## Hiding and preferring extension operators
+
+When two in-scope extensions both declare the same operator for a target that both can match, that is a conflict — the same idea as conflicting extension methods. Resolve it on `use extension` with postfix `hide` or `insteadof`. The adaptation names the target in angle brackets (`operator *<string>`). That qualifier is not part of the operator declaration. **Operators cannot be renamed with `as`** (`TYHP4170`).
+
+```tyhp
+<?tyhp
+
+use extension StringOperators {
+    StringOperators::operator *<string> hide;
+    operator *<array> hide;
+};
+
+use extension StringOperators, RepeatOps {
+    RepeatOps::operator *<string> insteadof StringOperators;
+};
+```
+
+- `Foo::bar as baz;` is a method rename. `Foo::operator * as something;` is an **error**.
+- `operator *<string> hide` hides that target only. `operator * hide` hides every `*` member on that extension.
+- `operator convert hide` hides every convert on that extension.
+- `operator +<Money> hide` hides all `+` members for that target (unary and binary together).
+- `hide` is a contextual keyword only inside `{ }` adaptations. Do not use overlay `omit` here, and do not use PHP trait `as private`.
+
+The same syntax works in `.tyhp` and tyhpdef. See [Use statements](tyhp_0350_useStatements.md) and [Extensions](tyhp_2100_extensions.md#importing-extensions-with-use-extension).
 
 ## Unary Operators
 
@@ -129,12 +173,12 @@ Unary operator overloads take a single self parameter and emit as static methods
 
 Unary operators compile to methods with fixed names:
 
-- + (as-numeric) -> __asNumeric(self $o): int|float
-- - (negation) -> __negate(self $o): <return_type>
-- ! (boolean not) -> __not(self $o): <return_type>
-- ~ (bitwise not) -> __bwNot(self $o)
-- ++ (increment) -> __increment(self $o): self
-- -- (decrement) -> __decrement(self $o): self
+- `+` (as-numeric) -> `__asNumeric(self $o): int|float`
+- `-` (negation) -> `__negate(self $o): <return_type>`
+- `!` (boolean not) -> `__not(self $o): <return_type>`
+- `~` (bitwise not) -> `__bwNot(self $o)`
+- `++` (increment) -> `__increment(self $o): self`
+- `--` (decrement) -> `__decrement(self $o): self`
 
 ## Comparison Operators
 
@@ -142,15 +186,15 @@ Comparison operators return bool (int for spaceship). They emit as static method
 
 Comparison operators compile to these method names:
 
-- < -> __isLessThan($l, $r): bool
-- <= -> __isLessThanOrEqual($l, $r): bool
-- > -> __isGreaterThan($l, $r): bool
-- >= -> __isGreaterThanOrEqual($l, $r): bool
-- == -> __isEqual($l, $r): bool
-- != -> __isNotEqual($l, $r): bool
-- === -> __isExact($l, $r): bool
-- !== -> __isNotExact($l, $r): bool
-- <=> -> __compare($l, $r): int
+- `<` -> `__isLessThan($l, $r): bool`
+- `<=` -> `__isLessThanOrEqual($l, $r): bool`
+- `>` -> `__isGreaterThan($l, $r): bool`
+- `>=` -> `__isGreaterThanOrEqual($l, $r): bool`
+- `==` -> `__isEqual($l, $r): bool`
+- `!=` -> `__isNotEqual($l, $r): bool`
+- `===` -> `__isExact($l, $r): bool`
+- `!==` -> `__isNotExact($l, $r): bool`
+- `<=>` -> `__compare($l, $r): int`
 
 ## Conversion Operators
 
@@ -452,7 +496,7 @@ Define convert operators for seamless type integration — convert-to instance m
 ## Common Mistakes
 
 :::danger
-Do not define operators on traits, interfaces, or structs — operators are only allowed on classes and enums.
+Do not define operators on structs — struct bodies are properties only. Traits and interfaces may declare `operator` like classes.
 :::
 
 :::danger
@@ -468,12 +512,13 @@ Do not define the convert operator with both parameter AND return type as self �
 :::
 
 :::danger
-Do not define two forms of the same operator that can both match the same runtime operand combination — forms must be mutually distinguishable.
+Do not rename an extension operator with `as` — that is `TYHP4170`. Hide it or pick a winner with `insteadof`.
 :::
+
 
 ## Compiler Errors
 
-- Defining operator overloads on traits, interfaces, or structs.
+- Defining operator overloads on structs.
 - Binary operator where neither operand is self.
 - Unary operator where the operand is not self.
 - A hand-written method conflicting with a declared operator's reserved generated name.
@@ -481,3 +526,4 @@ Do not define two forms of the same operator that can both match the same runtim
 - The convert operator with both parameter and return type as self.
 - A decimal convert target when tyhp/decimal is not a project dependency.
 - Missing abstract operator implementation in a concrete child class.
+- Renaming an extension operator with `as` (`TYHP4170`); use `hide` or `insteadof`.

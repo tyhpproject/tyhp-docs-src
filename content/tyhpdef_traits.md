@@ -41,9 +41,11 @@ trait TimestampedEntity {
 }
 ```
 
+A reserved-word short name is written fully qualified. See [Reserved-word type names](tyhpdef_classes.md#reserved-word-type-names).
+
 ## Properties
 
-Trait properties are declared with visibility modifiers and types, just like class properties.
+Trait properties are declared with visibility modifiers and types, just like class properties. Hooked properties use the same bodyless `{ get; set; }` form as on classes.
 
 ```tyhp
 <?tyhpdef
@@ -111,6 +113,10 @@ trait KeyValueStore<TKey extends string|int, TValue> {
 }
 ```
 
+## Partial traits
+
+`partial` on a tyhpdef trait follows the same rules as on classes. Include brace `partial trait Foo { … }` adds members. Overlay `partial trait Foo<T>;` replaces written header clauses and keeps unlisted members (overlay-only, `TYHP8034`). See [Tyhpdef Overlays](tyhpdef_overlays.md) and [Classes in Tyhpdef](tyhpdef_classes.md#partial-types-base--include).
+
 ## Using Imported Traits in Tyhp
 
 Once a trait is declared in Tyhpdef, Tyhp classes can use it with full type checking. Generic traits require concrete type arguments at the use site.
@@ -157,7 +163,7 @@ class AuditableUser {
 
 ## Deprecated and Obsolete
 
-Both the trait itself and individual members can be marked as `deprecated` or `obsolete`.
+The trait itself can be marked `deprecated` or `obsolete` (top-level). Member-level markers parse but are not enforced in this alpha.
 
 ```tyhp
 <?tyhpdef
@@ -167,7 +173,7 @@ deprecated trait LegacyCacheable {
 }
 
 trait Cacheable {
-    deprecated public function cacheForever(): void;
+    public function cacheForever(): void;
     public function cache(int $ttl): void;
     public function invalidateCache(): void;
 }
@@ -188,5 +194,5 @@ DON'T include method bodies in trait declarations. All methods must end with a s
 :::
 
 :::danger
-DON'T include property default values. Properties are declared as type and name only.
+DON'T use `=` on tyhpdef properties or consts. Record PHP's expected start value with `??` (`public array $items ?? [];`). Parameter defaults still use `=`.
 :::

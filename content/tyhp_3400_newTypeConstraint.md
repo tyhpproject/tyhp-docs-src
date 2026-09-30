@@ -1,460 +1,170 @@
 ---
-title: 'The new<TArgs...> Constructable Object Type'
+title: 'Object Shapes and `__New<T>`'
 status:
-  tier: 3
+  tier: 2
   story: '27'
-  state: planned
+  state: complete
 ---
 
-:::warning Not in this alpha
-This feature is **not included** in Tyhp 805.0.0-alpha.1 (roadmap Tier 2/3). The rest of this page describes the planned design. Do not expect these commands or syntax to work yet.
-:::
+An **object shape** is a structural object type: a named predicate on an instance. It is the object counterpart of a struct (an array shape). Two values may match the same shape and still be different PHP classes.
 
+A shape is declared only as the right-hand side of a `type` alias, using `object { … }`. Use the alias name everywhere else (parameters, properties, returns, generic bounds, unions). `new class { … }` remains the anonymous-class **expression**.
 
-Tyhp provides a built-in type called new that represents "an object that can be constructed." Used exclusively in type positions, new enables type-safe factory patterns, dependency injection containers, and generic constructor constraints. It works analogously to other built-in type facets like callable and iterable — new<TArgs...> specifies the constructor parameter types that a class must accept.
+`__New<T>` marks a shape as **constructable**: a concrete class with a public constructor that can be invoked as the shape’s `__construct` (or the PHP default zero-argument constructor when the shape has no `__construct`). Values of a shape and of `__New<Shape>` are **instances**. Class-name strings use `__ClassName<Shape>` and `__ClassName<__New<Shape>>`.
 
-:::note
-The new type is purely a compile-time construct. It is completely erased from PHP output — replaced with object in type positions and stripped from generic constraints. There is zero runtime cost.
-:::
-
-## Basic Syntax
-
-The new type is used in type positions (parameter types, return types, property types, generic constraints). Bare new means "constructable with zero arguments." new<TArgs...> means "constructable with the specified argument types." Unlike callable<TArgs..., TReturn> which uses a return-last convention, new<TArgs...> has no return type parameter — the return type of a constructor is always the class itself.
+## Object shapes
 
 ```tyhp
 <?tyhp
 
-// Accept any class constructable with zero arguments
-function createDefault(new $constructable): object {
-    return new $constructable();
-}
+type ClockShape = object {
+    public function now(): \DateTimeImmutable;
+};
 
-// Accept any class constructable with (string, int)
-function createWithArgs(new<string, int> $constructable, string $name, int $id): object {
-    return new $constructable($name, $id);
-}
-
-// As a return type
-function getFactory(): new<string> {
-    return SomeClass::class;
-}
-```
-
-## Compiled PHP Output
-
-The new type has no PHP runtime equivalent. In type positions, new is replaced with object. Generic arguments are stripped. Generic constraints containing new<> are erased entirely as part of generic erasure.
-
-```php
-<?php
-declare(strict_types=1);
-
-// function createDefault(new $constructable): object
-// compiles to:
-function createDefault(object $constructable): object {
-    return new $constructable();
-}
-
-// function createWithArgs(new<string, int> $constructable, string $name, int $id): object
-// compiles to:
-function createWithArgs(object $constructable, string $name, int $id): object {
-    return new $constructable($name, $id);
-}
-
-// function getFactory(): new<string>
-// compiles to:
-function getFactory(): object {
-    return SomeClass::class;
-}
-```
-
-## Generic Constraints with new<>
-
-The most common use of new<> is as a generic constraint. This allows you to write generic factory functions that are type-safe: the compiler verifies that any concrete class passed as a type argument has a public constructor matching the specified signature.
-
-```tyhp
-<?tyhp
-
-// T must be constructable with a string argument
-function create<T extends new<string>>(string $value): T {
-    return new T($value);
-}
-
-// T must be constructable with zero args AND implement Logger
-function makeLogger<T extends new & Logger>(): T {
-    return new T();
-}
-
-// Multiple constructor parameter types
-function buildService<T extends new<Config, Database> & Service>(
-    Config $config,
-    Database $db
-): T {
-    return new T($config, $db);
-}
-
-// Usage:
-class UserService extends Service {
-    public function __construct(Config $config, Database $db) {
-        // ...
+class WallClock {
+    public function now(): \DateTimeImmutable {
+        return new \DateTimeImmutable();
     }
 }
 
-UserService $svc = buildService<UserService>($config, $db);
+function formatNow(ClockShape $c): string {
+    return $c->now()->format('c');
+}
+
+formatNow(new WallClock());
 ```
 
-```php
-<?php
-declare(strict_types=1);
+```tyhp
+<?tyhpdef
 
-// Generic constraints are erased — T becomes mixed
-function create(string $value): mixed {
-    // At runtime, the class name is passed as a parameter or determined by context
-    return new $value();
-}
+type FallbackConstraint = object {
+    public function getPrettyString(): string;
+    public function __toString(): string;
+};
 
-function makeLogger(): mixed {
-    return new $class();
-}
-
-function buildService(Config $config, Database $db): mixed {
-    return new $class($config, $db);
-}
+function parseConstraint(string $pretty): \Composer\Semver\Constraint\ConstraintInterface | FallbackConstraint;
 ```
 
-## Computed Intersection Types
+`ClockShape` in type position means `object` refined by that shape. You do not write `object & ClockShape`.
 
-Tyhp's type system automatically computes new<> type facets for every class based on its constructor signature. A class with N constructor parameters where the last M have defaults generates M+1 new<> facets — one for each valid prefix of arguments, down to the required minimum. These facets are included in the class's computed intersection type.
+### What a shape matches
+
+A nominal object type (or another shape) assigns to a shape when:
+
+- Every **public** member of the shape exists on the source (extra source members are allowed).
+- Methods match by callable compatibility (parameter contravariance, return covariance).
+- Properties match with readonly / hook variance (a writable shape property must be writable on the source).
+- `protected` / `private` members on the source do not satisfy the shape.
+- `__get` / `__call` / other magic satisfy a shape member only when the shape lists **that** magic method.
+
+`object` and `mixed` do not assign to a shape. Narrow with `$x is ClockShape` or declare the value as the shape (including tyhpdef returns).
+
+Empty `type X = object {};` is illegal; write `object`.
+
+### What a shape cannot do
+
+A shape alias is not a PHP class. These are errors:
+
+- `new ClockShape`
+- `ClockShape::foo()` / `ClockShape::class`
+- `extends ClockShape` / `implements ClockShape`
+- `$x->__construct(...)` when `$x` is shape-typed (`__construct` on a shape is only for `__New` / `new T()`)
+
+`object { … }` is illegal except as the alias right-hand side.
+
+### Nominal parents plus extra members
+
+There is no `extends` / `implements` on the `object { }` header. Nominal parents are intersections:
+
+```tyhp
+type TimestampedLogger = \Psr\Log\LoggerInterface & object {
+    public function getLastLogAt(): \DateTimeImmutable;
+};
+```
+
+That type is `\Psr\Log\LoggerInterface` plus `getLastLogAt()`.
+
+## `__New<T>`
+
+`T` must be an object-shape alias. `T extends ClockShape` is an instance bound. `T extends __New<ClockShape>` is the same instance API **and** `new T(...)` is allowed.
 
 ```tyhp
 <?tyhp
 
-// No constructor — constructable with zero args
-class SimpleClass {
-}
-// Computed type includes: new
+type Named = object {
+    public function __construct(string $name): void;
+    public function ping(): void;
+};
 
-// One required param, two optional
-class ConfiguredClass {
-    public function __construct(
-        string $name,
-        int $priority = 0,
-        bool $active = true
-    ) {
-        // ...
-    }
-}
-// Computed type includes: new<string>, new<string, int>, new<string, int, bool>
-// Does NOT include bare new (first param is required)
-
-// All defaults — constructable with zero, one, or two args
-class AllDefaultsClass {
-    public function __construct(string $label = 'default', int $count = 0) {
-        // ...
-    }
-}
-// Computed type includes: new, new<string>, new<string, int>
-```
-
-## What Satisfies new<>
-
-Only concrete classes with public constructors can satisfy new<> constraints. Abstract classes, interfaces, traits, enums, and classes with private or protected constructors do not satisfy new<>.
-
-- Concrete class with no constructor: satisfies bare new (zero-arg constructable)
-- Concrete class with public constructor: satisfies new<TArgs...> based on its parameter types
-- Concrete class with all-default constructor: satisfies bare new and each prefix variant
-- Variadic-only constructor (__construct(mixed ...$args)): satisfies bare new
-- Abstract class: does NOT satisfy new<> — cannot be instantiated
-- Interface: does NOT satisfy new<> — cannot be instantiated
-- Trait: does NOT satisfy new<> — cannot be instantiated
-- Enum: does NOT satisfy new<> — enums use cases, not constructors
-- Private/protected constructor: does NOT satisfy new<> — not externally constructable
-- Struct: does NOT satisfy new<> — structs use struct literal syntax, not new
-
-## Type Hierarchy
-
-All new variants extend object directly. They are sibling types, not a nested subtype chain — new<T1, T2> does NOT extend new<T1>. A concrete class may satisfy multiple new<> variants independently based on its constructor's default parameter values. Every new type is assignable to object and mixed.
-
-```tyhp
-<?tyhp
-
-// new extends object
-object $obj = getConstructable();  // Always valid
-
-// Each new<> variant is independent
-// A class with __construct(string $a, int $b = 0) satisfies:
-//   new<string>        — required arg only
-//   new<string, int>   — both args
-// But it does NOT satisfy:
-//   new                — $a has no default
-//   new<int>           — wrong type for first arg
-//   new<string, int, bool> — too many params
-```
-
-## Intersection Types with new<>
-
-The new type can be combined with other types in intersection types. This is useful when you need a type that is both constructable and implements a specific interface.
-
-```tyhp
-<?tyhp
-
-// Must be constructable with zero args AND implement Serializable
-function createAndSerialize<T extends new & Serializable>(): string {
-    T $instance = new T();
-    return \serialize($instance);
-}
-
-// Must be constructable with Config AND implement Service
-function bootService<T extends new<Config> & Service>(Config $config): T {
-    T $service = new T($config);
-    $service->boot();
-    return $service;
-}
-```
-
-In the compiled PHP output, the new<> component is removed from intersection types. If only one component remains, it is emitted directly. If new<> was the only component, it is replaced with object.
-
-```php
-<?php
-declare(strict_types=1);
-
-// new & Serializable in a non-generic context compiles to:
-// Serializable (the new component is stripped)
-
-// new<string> | null compiles to:
-// object | null (new<> replaced with object in unions)
-```
-
-## Default Parameter Expansion
-
-A constructor with default parameters generates multiple new<> facets. Each valid prefix of arguments (from the minimum required count up to the total parameter count) produces a separate facet. This means a class can satisfy more specific and less specific new<> constraints simultaneously.
-
-```tyhp
-<?tyhp
-
-class Flexible {
-    public function __construct(
-        string $name,
-        int $priority = 0,
-        bool $active = true
-    ) {
-        // ...
-    }
-}
-
-// All of these are valid because Flexible's defaults expand to
-// new<string>, new<string, int>, and new<string, int, bool>
-function f1<T extends new<string>>(): T { return new T('test'); }
-function f2<T extends new<string, int>>(): T { return new T('test', 1); }
-function f3<T extends new<string, int, bool>>(): T { return new T('test', 1, true); }
-
-Flexible $a = f1<Flexible>();
-Flexible $b = f2<Flexible>();
-Flexible $c = f3<Flexible>();
-```
-
-## Inherited Constructors
-
-If a class does not declare its own constructor but inherits one from a parent class, the parent's constructor signature is used for new<> facet computation. If the parent constructor is protected and the child does not override it with a public one, the child is not externally constructable.
-
-```tyhp
-<?tyhp
-
-class Base {
-    public function __construct(string $name) {
-        // ...
-    }
-}
-
-// Child inherits Base's constructor
-class Child extends Base {
-    // No own constructor — uses Base's __construct(string $name)
-}
-
-// Child satisfies new<string> because it inherits Base's constructor
-function create<T extends new<string>>(string $name): T {
+function makeNamed<T extends __New<Named>>(string $name): T {
     return new T($name);
 }
-
-Child $child = create<Child>('test');
 ```
 
-## Dependency Injection Example
+If the shape has **no** `__construct`, `__New<Shape>` requires the PHP default **zero-argument** public constructor (no constructor in source, or every constructor parameter has a default). That is not “any constructor.” A type can match `HasQuery` as an instance and still fail `__New<HasQuery>` if its constructor needs arguments.
 
-The new<> type is particularly useful for dependency injection containers and service locators that need to construct objects generically while maintaining type safety.
+`public function __construct(): void;` on a shape is the explicit zero-argument form (same matching rule). `__construct` on a shape is never an instance method.
+
+Abstract classes, interfaces, traits, enums, and non-public constructors do not satisfy `__New<T>`. They may still satisfy the shape as instance types when the public members match.
+
+## Class-name strings
+
+| Type | Meaning |
+|------|---------|
+| `Shape` / `__New<Shape>` | Object **instance** |
+| `__ClassName<Shape>` | Name of some class whose instances match `Shape` (may be abstract or non-`new`-able) |
+| `__ClassName<__New<Shape>>` | Name of a concrete, public-`new`-able class matching `Shape` |
 
 ```tyhp
-<?tyhp
-
-class Container {
-    private array<string, object> $instances = [];
-
-    public function singleton<T extends new>(string $className): T {
-        if (!isset($this->instances[$className])) {
-            $this->instances[$className] = new T();
-        }
-        return $this->instances[$className];
-    }
-
-    public function make<T extends new<Config>>(string $className, Config $config): T {
-        return new T($config);
-    }
+function spinUp(__ClassName<__New<Named>> $cls, string $name): Named {
+    return new $cls($name);
 }
 
-class CacheService {
-    public function __construct() { }
+string $raw = \getClassName();
+if (\class_exists<__New<Named>>($raw)) {
+    Named $obj = spinUp($raw, 'x');
 }
-
-class DatabaseService {
-    public function __construct(Config $config) { }
-}
-
-Container $container = new Container();
-CacheService $cache = $container->singleton<CacheService>(CacheService::class);
-DatabaseService $db = $container->make<DatabaseService>(DatabaseService::class, $config);
 ```
 
-## Compiler Error Examples
+`new $cls(...)` is an error when `$cls` is `__ClassName<Shape>` without `__New`. Bare `__ClassName` / `__ClassName<object>` / `__ClassName<SomeClass>` keep their existing dynamic-`new` rules.
 
-The compiler reports specific errors when new<> constraints are violated. Different error codes distinguish between abstract types, missing constructors, and signature mismatches.
+`\class_exists<ClockShape>($name)` narrows to `__ClassName<ClockShape>`. `\class_exists<__New<ClockShape>>($name)` narrows to `__ClassName<__New<ClockShape>>`. A string literal that already names a matching class can assign without a guard.
+
+## `is` and `instanceof`
+
+`is` and `instanceof` are the same operator in Tyhp. Prefer `is` in examples.
+
+`$x is ClockShape` is a **shape guard**, not PHP `instanceof` of a class. It emits `\Tyhp\Type::is(...)`. After a pass, `$x` is narrowed to the shape. `$x is User` when `User` is a real class still emits native `instanceof`.
 
 ```tyhp
-<?tyhp
-
-abstract class AbstractBase {
-    public function __construct(string $name) { }
-}
-
-interface Buildable {
-}
-
-class PrivateCtorClass {
-    private function __construct() { }
-}
-
-class StringCtorClass {
-    public function __construct(string $name) { }
-}
-
-function createNew<T extends new>(): T { return new T(); }
-function createString<T extends new<string>>(string $v): T { return new T($v); }
-function createInt<T extends new<int>>(int $v): T { return new T($v); }
-
-// ERROR TYHP4060: Abstract type 'AbstractBase' cannot satisfy 'new' constraint
-// createNew<AbstractBase>();
-
-// ERROR TYHP4058: Type 'Buildable' does not satisfy 'new' constraint
-// — it must be a concrete class with a public constructor
-// createNew<Buildable>();
-
-// ERROR TYHP4058: Type 'PrivateCtorClass' does not satisfy 'new' constraint
-// — it must be a concrete class with a public constructor
-// createNew<PrivateCtorClass>();
-
-// ERROR TYHP4059: Type 'StringCtorClass' does not satisfy 'new<int>'
-// — constructor signature does not match
-// createInt<StringCtorClass>(42);
-```
-
-:::warning
-Error TYHP4058 (CheckerTypeNotConstructable): "Type '{0}' does not satisfy 'new' constraint — it must be a concrete class with a public constructor"
-:::
-
-:::warning
-Error TYHP4059 (CheckerConstructorSignatureMismatch): "Type '{0}' does not satisfy 'new<{1}>' — constructor signature does not match"
-:::
-
-:::warning
-Error TYHP4060 (CheckerAbstractNotConstructable): "Abstract type '{0}' cannot satisfy 'new' constraint"
-:::
-
-## Interaction with callable<>
-
-The new<> type and callable<> type are independent facets in a class's computed intersection type. A class that has both a public constructor and an __invoke method satisfies both. A constraint like T extends new<string> & callable<int, bool> requires both.
-
-```tyhp
-<?tyhp
-
-class Validator {
-    public function __construct(string $pattern) {
-        // ...
-    }
-
-    public function __invoke(string $input): bool {
-        // ...
+function fromObject(object $obj): void {
+    if ($obj is ClockShape) {
+        formatNow($obj);
     }
 }
-
-// Validator satisfies both new<string> AND callable<string, bool>
-function createAndRun<T extends new<string> & callable<string, bool>>(
-    string $pattern,
-    string $input
-): bool {
-    T $validator = new T($pattern);
-    return $validator($input);
-}
 ```
 
-## Tyhpdef Integration
+## Compiled PHP
 
-The binder computes new<> facets for tyhpdef-declared classes (external PHP classes) just as it does for user-declared classes. This enables using new<> constraints with standard library and third-party classes.
+Shapes and `__New<Shape>` erase to `object`, or to nominal conjuncts from an intersection when those are legal PHP hints (`LoggerInterface & ClockShape` → `LoggerInterface`). Generic bounds erase with other generics. The compiler never emits a PHP class for the alias. `$x is ClockShape` emits `\Tyhp\Type::is`. `typeof(ClockShape)` / a source-alias factory produces a `\Tyhp\Type` descriptor for matching; it does not construct instances.
 
-```tyhp
-<?tyhp
+## Recovering an unnamed return
 
-// DateTime has __construct(string $datetime = 'now', ?DateTimeZone $timezone = null)
-// So DateTime satisfies: new, new<string>, new<string, ?DateTimeZone>
+If a tyhpdef function returns a shape without a hand-written alias name, `__FunctionReturnType<'fn'>` / `__MethodReturnType<T, 'method'>` is that return type. Harvest of PHP `return new class { … }` writes a generated shape alias so the return is not `object`.
 
-function createDated<T extends new<string>>(string $date): T {
-    return new T($date);
-}
+## Related
 
-DateTime $dt = createDated<DateTime>('2026-01-01');
-```
+The three gradual PHP bases and their refinements:
 
-## Best Practices
+| Base (untyped) | Shape | `new Alias` |
+|---|---|---|
+| `object` | `object { … }` — alias-only | illegal |
+| `callable` | `callable(…): R` — alias or inline | illegal |
+| `struct` / `array` | `struct { … }` — named as `type`, inline in type position | legal (array construction) |
 
-:::tip
-Use new<> constraints for generic factory functions, builders, and dependency injection. They provide compile-time verification that a class can actually be constructed with the expected arguments.
-:::
-
-:::tip
-Combine new<> with interface constraints (T extends new<Config> & Service) to require both constructability and interface compliance in a single generic parameter.
-:::
-
-:::tip
-Use bare new (without generic arguments) when you only need zero-argument constructability. This is common for singleton and prototype patterns.
-:::
-
-:::tip
-Prefer new<> constraints over runtime reflection for constructor validation. The compiler catches mismatches at compile time instead of at runtime.
-:::
-
-:::tip
-Remember that default parameter expansion allows a class with __construct(string $a, int $b = 0) to satisfy both new<string> and new<string, int>. Design constraints to match the minimum required arguments.
-:::
-
-## Common Mistakes
-
-:::danger
-Don't use new<> on types you will not construct — it adds an unnecessary constraint. Only use new<> when the generic function or class actually creates instances.
-:::
-
-:::danger
-Don't forget that new<> only constrains the constructor signature. It does not guarantee the class has specific methods or properties — use interface constraints for that.
-:::
-
-:::danger
-Don't expect new<> to work with abstract classes, interfaces, or enums. These types cannot be directly instantiated and will produce a compiler error.
-:::
-
-:::danger
-Don't confuse new<string, int> with callable<string, int>. The new type has no return type parameter (the constructor always returns the class itself), while callable uses a return-last convention.
-:::
-
-:::danger
-Don't rely on new<> at runtime — it is completely erased from PHP output. The constraint exists only at compile time for type safety.
-:::
-
-:::danger
-Don't assume new<T1, T2> is a subtype of new<T1>. Each new<> variant is an independent facet — a class satisfies them based on its actual constructor defaults, not by subtyping between new<> types.
-:::
+- [Type Aliases](tyhp_0700_typeAliases.md)
+- [New and Changed Types](tyhp_0150_newTypes.md) (`__ClassName`, `__New`, `__FunctionReturnType`, callable shapes)
+- [Type Narrowing and Guards](tyhp_0200_typeNarrowingAndGuards.md)
+- [Dynamic Language Features](tyhp_2400_dynamicLanguageFeatures.md)
+- [Tyhpdef Generation](cli_tyhpdefGeneration.md) (anonymous-class harvest)
+- [Structs](tyhp_0400_structs.md)

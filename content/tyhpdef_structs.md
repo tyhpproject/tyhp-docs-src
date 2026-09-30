@@ -8,17 +8,21 @@ status:
 
 Tyhpdef lets you define structs that describe PHP associative array structures to the Tyhp compiler. Structs are value types backed by arrays in PHP but treated as typed objects in Tyhp, providing compile-time property access checking, default values, and structural type compatibility. A struct defined in Tyhpdef works exactly the same as one defined in regular Tyhp code.
 
+:::note
+`#[\Tyhp\Php]` is **illegal** on a `struct` declaration (**TYHP4304**), including in `.tyhpdef`. Wrap the struct in `declare(php=…)` instead — see [PHP Version Gating](tyhp_0320_phpVersionGating.md#structs-and-extensions).
+:::
+
 ## Basic Struct Declaration
 
-A struct declares typed properties that correspond to keys in a PHP associative array. Properties do not have visibility modifiers — all struct properties are public.
+A named struct is a `type` alias whose right-hand side is a struct shape. Properties do not have visibility modifiers — all struct properties are public. Inline `struct { … }` is also legal in type position (parameters, returns, unions).
 
 ```tyhp
 <?tyhpdef
 
-struct Credentials {
+type Credentials = struct {
     string $username;
     string $password;
-}
+};
 ```
 
 This struct describes PHP arrays of the shape `['username' => 'admin', 'password' => 'secret']`. In Tyhp code, you access struct properties with arrow syntax (`$creds->username`) and the compiler translates that to array key access.
@@ -30,13 +34,13 @@ A property is required if it is non-nullable and has no default value. A propert
 ```tyhp
 <?tyhpdef
 
-struct UserProfile {
+type UserProfile = struct {
     string $name;              // Required: non-nullable, no default
     string $email;             // Required
     ?string $bio;              // Optional: nullable, no default
     string $role = "user";     // Has a default value
     ?int $age;                 // Optional
-}
+};
 ```
 
 ## Property Aliases
@@ -46,14 +50,14 @@ PHP associative arrays can have keys that are not valid PHP variable names. Prop
 ```tyhp
 <?tyhpdef
 
-struct EmailEnvelope {
+type EmailEnvelope = struct {
     string $to;
     string $subject;
     string $body;
     ?string 'fromEmailAddress' as $from;
     ?string 'Reply-To' as $replyTo;
     ?string 'Unsubscribe Link @ Your \"Domain\"' as $unsubscribeLink;
-}
+};
 ```
 
 With this declaration, `$envelope->replyTo` in Tyhp compiles to `$envelope['Reply-To']` in PHP.
@@ -65,14 +69,14 @@ Properties can have default values. When a struct is instantiated, properties wi
 ```tyhp
 <?tyhpdef
 
-struct DatabaseConfig {
+type DatabaseConfig = struct {
     string $host = "localhost";
     int $port = 3306;
     string $charset = "utf8mb4";
     ?string $database;
     ?string $username;
     ?string $password;
-}
+};
 ```
 
 ## Struct Inheritance
@@ -82,17 +86,17 @@ Structs can extend other structs using the `extends` keyword. The child struct i
 ```tyhp
 <?tyhpdef
 
-struct BaseEntity {
+type BaseEntity = struct {
     int $id;
     string $createdAt;
     string $updatedAt;
-}
+};
 
-struct UserEntity extends BaseEntity {
+type UserEntity = struct extends BaseEntity {
     string $name;
     string $email;
     ?string $avatar;
-}
+};
 ```
 
 :::note
@@ -106,20 +110,20 @@ Struct properties can reference other struct types, creating nested structures.
 ```tyhp
 <?tyhpdef
 
-struct Address {
+type Address = struct {
     string $street;
     string $city;
     string $state;
     string $zipCode;
     string $country = "US";
-}
+};
 
-struct Company {
+type Company = struct {
     string $name;
     Address $headquarters;
     ?Address $mailingAddress;
     array<string> $departments;
-}
+};
 ```
 
 ## Generic Structs
@@ -129,20 +133,32 @@ Structs support generic type parameters, making them reusable across different t
 ```tyhp
 <?tyhpdef
 
-struct ApiResponse<T> {
+type ApiResponse<T> = struct {
     bool $success;
     ?T $data;
     ?string $error;
     int $statusCode;
-}
+};
 
-struct PaginatedResult<T> {
+type PaginatedResult<T> = struct {
     array<T> $items;
     int $total;
     int $page;
     int $perPage;
     bool $hasMore;
-}
+};
+```
+
+## Inline struct types
+
+A struct shape may appear in type position without an alias name. Group it with parentheses when it is an arm of `|` / `&`.
+
+```tyhp
+<?tyhpdef
+
+function origin(): struct { float $lat; float $lng; };
+
+function maybeOrigin(): (struct { float $lat; float $lng; }) | null;
 ```
 
 ## Using Tyhpdef Structs with Functions
@@ -152,14 +168,14 @@ Tyhpdef structs are commonly used to describe the shape of arrays accepted or re
 ```tyhp
 <?tyhpdef
 
-struct MailOptions {
+type MailOptions = struct {
     string $to;
     string $subject;
     string $body;
     ?string $from;
     ?array<string> $cc;
     ?array<string> $bcc;
-}
+};
 
 function sendMail(MailOptions $options): bool;
 function getMailConfig(): MailOptions;

@@ -47,7 +47,7 @@ use function App\Helpers\{
 
 ## Function Aliases
 
-Functions can be aliased at the declaration level. The original PHP function name comes first, then as, then the name Tyhp code will use.
+Functions can be aliased at the declaration level. The original PHP function name comes first, then as, then the name Tyhp code will use. That **adds** a Tyhp name and leaves the PHP name callable.
 
 ```tyhp
 <?tyhpdef
@@ -61,17 +61,19 @@ function \array_key_exists as keyExists(
 
 // Generic function with alias
 function \array_map<T, U> as map(
-    callable<T, U> $callback,
+    callable(T): U $callback,
     array<T> $array
 ): array<U>;
 ```
+
+Overlay `partial function X as Y` is different: it **renames** the live Tyhp name without restating the signature, unless the same overlay file also keeps `X`. Match later overlays to the current Tyhp name. See [Tyhpdef Overlays](tyhpdef_overlays.md#overlay-partial-function).
 
 ## Variable and Constant Aliases
 
 ```tyhp
 <?tyhpdef
 
-int $myGlobalPHPVar as $myGlobalTyhpVar ?? 0;
+int $myGlobalPHPVar as $myGlobalTyhpVar;
 
 const int \MAX_LOOPS_ALLOWED as MAX_LOOPS;
 
@@ -80,7 +82,7 @@ const string \APP_VERSION as VERSION;
 
 ## Class, Interface, Trait, and Enum Aliases
 
-Object type declarations can be aliased at the declaration level. The original PHP name is specified with as followed by the alias name that Tyhp will use.
+Object type declarations can be aliased at the declaration level. The original PHP name is specified with as followed by the alias name that Tyhp will use. When that PHP name is a reserved word (`is`, `isset`, …), write it fully qualified: `class \Hamcrest\Core\Is as IsMatcher { … }`. See [Reserved-word type names](tyhpdef_classes.md#reserved-word-type-names).
 
 ```tyhp
 <?tyhpdef
@@ -97,6 +99,8 @@ trait HasTools as isHandyman {}
 
 enum USAStates as CountryProvinces {}
 ```
+
+Overlay `partial class X as Y;` (also interface / trait / enum) is different: it **renames** the live Tyhp name without restating members, unless the same overlay file also keeps `X` (`partial class X;`). Match later overlays to the current Tyhp name. See [Tyhpdef Overlays](tyhpdef_overlays.md#overlay-partial-header-form-partial-class-foo).
 
 ## Member Aliases Within Classes
 
@@ -148,7 +152,7 @@ use extension StringExtensions {
 
 ## Alias Restrictions
 
-The following items cannot be aliased:
+Do not alias these — PHP dispatches them by their real names. This alpha does **not** reject the aliases at compile time:
 
 - A class's `__construct` or `__destruct` method
 - Any magic methods (`__get`, `__set`, `__isset`, `__unset`, `__call`, `__callStatic`, `__sleep`, `__wakeup`, `__toString`, `__invoke`, `__clone`, etc.)
@@ -162,7 +166,7 @@ DO: Import the same PHP item with multiple aliases when you need different type 
 :::
 
 :::danger
-DON'T: Alias magic methods or constructors. The compiler will reject these because PHP relies on their specific names for internal dispatch.
+DON'T: Alias magic methods or constructors. PHP still dispatches on the original names; this alpha does not reject those aliases for you.
 :::
 
 :::danger
@@ -179,3 +183,4 @@ DON'T: Include namespace separators in alias names. Aliases must be simple ident
 - Use statement aliases follow standard PHP `use ... as ...` syntax
 - Group use declarations with aliases are supported
 - Class members (properties, methods, constants) can be individually aliased
+- Overlay `partial function X as Y` / `partial class X as Y` **rename** the live Tyhp name without restating the signature or members; a same-file keep (`partial function X;` / `partial class X;`) keeps both names

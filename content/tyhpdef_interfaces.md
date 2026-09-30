@@ -6,7 +6,7 @@ status:
   state: complete
 ---
 
-Tyhpdef lets you describe existing PHP interfaces to the Tyhp compiler. When importing an interface, you provide fully typed method signatures, constants, and property declarations. You only need to declare the members you intend to use in your Tyhp code — the compiler treats undeclared members as nonexistent.
+Tyhpdef lets you describe existing PHP interfaces to the Tyhp compiler. When importing an interface, you provide fully typed method signatures, constants, and property declarations. Hooked properties use the same bodyless `{ get; set; }` form as on classes. You only need to declare the members you intend to use in your Tyhp code — the compiler treats undeclared members as nonexistent.
 
 ## Basic Interface Declaration
 
@@ -34,9 +34,11 @@ interface Logger {
 }
 ```
 
+A reserved-word short name is written fully qualified. See [Reserved-word type names](tyhpdef_classes.md#reserved-word-type-names).
+
 ## Interface Constants
 
-Interfaces can declare typed constants. The constant type and name are specified, but the value itself is not included since Tyhpdef is declaration-only.
+Interfaces can declare typed constants. The constant type and name are specified, but the value itself is not included since Tyhpdef is declaration-only. An implementing class that redeclares the same constant must keep that type (or omit the type and inherit it).
 
 ```tyhp
 <?tyhpdef
@@ -71,6 +73,10 @@ interface Stream extends Readable, Writable {
 }
 ```
 
+## Partial interfaces
+
+`partial` on a tyhpdef interface follows the same rules as on classes. In include files, brace `partial interface Foo { … }` **adds** members (`TYHP8002` on a duplicate, `TYHP8014` if the type is missing). Overlay brace `partial` replaces listed members. Overlay `partial interface Foo<T>;` replaces written header clauses and keeps unlisted members (overlay-only, `TYHP8034`). See [Tyhpdef Overlays](tyhpdef_overlays.md) and [Classes in Tyhpdef](tyhpdef_classes.md#partial-types-base--include).
+
 ## Generic Interfaces
 
 Interfaces support generic type parameters with optional constraints. This lets you describe PHP interfaces that work with different types while maintaining type safety in Tyhp.
@@ -92,6 +98,8 @@ interface SortableCollection<T extends \Comparable> {
     public function first(): ?T;
 }
 ```
+
+Harvested `@template` bounds on interfaces follow the same FQCN and missing-argument rules as [classes](tyhpdef_classes.md#generic-classes).
 
 ## Generic Interface Inheritance
 
@@ -118,10 +126,10 @@ Tyhpdef supports method overloads on interfaces. You declare multiple signatures
 ```tyhp
 <?tyhpdef
 
-struct PersonName {
+type PersonName = struct {
     string $first;
     string $last;
-}
+};
 
 interface Person {
     public function getFirstName(): ?string;
@@ -150,7 +158,7 @@ interface AsyncRepository<T> {
 
 ## Deprecated and Obsolete Interfaces
 
-Interfaces and their individual members can be marked as `deprecated` or `obsolete`. The compiler emits a warning when deprecated items are used and an error for obsolete items.
+Interfaces themselves can be marked `deprecated` or `obsolete` (top-level). Member-level markers on interface methods are parsed but not enforced in this alpha.
 
 ```tyhp
 <?tyhpdef
@@ -160,7 +168,7 @@ deprecated interface OldLogger {
 }
 
 interface ModernLogger {
-    deprecated public function logLegacy(string $msg): void;
+    public function logLegacy(string $msg): void;
     public function log(string $level, string $message): void;
 }
 ```
@@ -180,5 +188,5 @@ DON'T include method bodies in interface declarations. All methods must end with
 :::
 
 :::danger
-DON'T declare private members. Only public and protected members are visible to Tyhp. Private members in a Tyhpdef interface declaration will cause a parse error.
+DON'T put method bodies in interface declarations. All methods must end with a semicolon. Private interface methods are skipped by the checker (PHP helper-method convention); they are not a parse error, but they are not part of the Tyhp-visible contract.
 :::

@@ -94,6 +94,8 @@ namespace Psr\Log\LogLevel {
 
 You can import a PHP item from its original namespace and expose it under a different namespace in Tyhp. When a fully-qualified name with a leading backslash is used on a declaration, the item is imported from that PHP namespace but registered in the tyhpdef's declared namespace.
 
+A leading-backslash name that matches the enclosing namespace is also how a reserved-word short name is written (`class \Hamcrest\Core\Is` inside `namespace Hamcrest\Core`). Generate emits that form so the parser treats the name as a name rather than a keyword. It is not a cross-namespace import. See [Reserved-word type names](tyhpdef_classes.md#reserved-word-type-names).
+
 ```php
 <?php
 
@@ -111,15 +113,15 @@ function testEmail($emailAddress) { return true; }
 <?tyhpdef
 
 namespace EL\Options {
-    struct Connect {
+    type Connect = struct {
         bool $verbose;
-    }
+    };
 
-    struct Statistics {
+    type Statistics = struct {
         bool $opened;
         ?bool $unopened;
         ?bool $bounced;
-    }
+    };
 }
 
 namespace EL {
@@ -194,6 +196,7 @@ DON'T: Start namespace names with a leading backslash. Namespace declarations ne
 
 - Namespace declarations do not use a leading backslash
 - Items imported from a different PHP namespace use a fully-qualified name with leading backslash
+- A reserved-word short name in the same namespace is also written fully qualified (`class \Hamcrest\Core\Is` inside `namespace Hamcrest\Core`)
 - Only the base name of the imported item is added to the declared namespace
 - Both braced and semicolon-style namespace syntax are supported
 - Multiple namespaces can coexist in one tyhpdef file using braced blocks

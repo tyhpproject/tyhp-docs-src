@@ -1,7 +1,7 @@
 /*
 Language: Tyhp
 Author: Anthony Rainer <anthony@ddress.email>
-Description: Tyhp is a strongly typed extension to PHP.
+Description: Tyhp is a typed superset of the PHP language.
 Website: https://www.tyhplang.com
 Category: common
 */

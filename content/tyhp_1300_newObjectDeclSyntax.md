@@ -6,15 +6,15 @@ status:
   state: complete
 ---
 
-Tyhp adds new syntax to class declarations that does not exist in PHP. This includes constructor return types for explicit constructor chaining, promoted constructor parameters, the init property modifier, and property accessors. These features make class declarations more expressive and self-documenting.
+Tyhp adds new syntax to class declarations that does not exist in PHP. This includes constructor return types for explicit constructor chaining, promoted constructor parameters, and property accessors. These features make class declarations more expressive and self-documenting.
 
 ## Constructor Return Types
 
-In PHP, constructors never have a return type. Tyhp introduces two constructor return type annotations: : void and : parent(args...). These provide a structured way to declare constructor behavior and enforce correct parent constructor chaining.
+In PHP, constructors never have a return type. Tyhp constructors may declare `: void` when the constructor does not chain to a parent, or `: parent(args...)` when it does. Omitting the return type is equivalent to `: void`: no `parent::__construct(...)` call is inserted. Use `: parent(args...)` when you want the parent constructor called first.
 
 ## Explicit Void Constructor
 
-The : void return type explicitly states that a constructor does not chain to a parent. This is the default behavior when no return type is specified, but writing it makes the intent clear and self-documenting.
+A constructor that does not use `: parent(...)` may be declared `: void`, or the return type may be omitted entirely — the two forms are equivalent. Both mean this constructor does not insert a `parent::__construct(...)` call.
 
 ```tyhp
 <?tyhp
@@ -25,6 +25,15 @@ class SimpleClass
         public string $name,
         public int $age
     ): void {}
+}
+
+// Equivalent: the return type may be omitted.
+class AnotherClass
+{
+    public function __construct(
+        public string $name,
+        public int $age
+    ) {}
 }
 ```
 
@@ -66,7 +75,7 @@ class UserModel extends BaseModel
 
     public function __construct(string $name): parent(false, 19, $name)
     {
-        $this->displayName = $name->toupper();
+        $this->displayName = \strtoupper($name);
     }
 }
 ```
@@ -112,7 +121,7 @@ class Child extends BaseModel
 
     public function __construct(string $input): parent(true, 5, $input)
     {
-        $input = $input->tolower();
+        $input = \strtolower($input);
         $this->processed = $input;
     }
 }
@@ -140,7 +149,7 @@ Because parent(...) is called before the constructor body executes, the parent a
 
 ## Passing Static Values and Parameters
 
-The arguments in parent(...) can be static values (literals, constants) or parameters from the current constructor. They cannot be expressions that depend on $this or computed values, since the parent call happens before the constructor body.
+Because parent(...) is inserted at the start of the constructor body, prefer literals, constants, and incoming parameters. Avoid `$this` and method calls in those arguments — the instance is not fully constructed yet. The compiler does not currently reject those expressions; treat this as guidance, not a hard check.
 
 ```tyhp
 <?tyhp
@@ -181,82 +190,9 @@ class DefaultVehicle extends BaseModel
 }
 ```
 
-## The init Property Modifier
+## Constructor Property Promotion
 
-The init modifier declares a property as settable only during construction and via the with keyword. This is distinct from PHP's readonly modifier, which prevents ALL mutation after construction — including via with. The init modifier fills the gap between fully mutable properties and fully readonly properties.
-
-- `(no modifier)` — Set in constructor: Yes. Set after construction: Yes. Set via `with`: Yes.
-- `readonly` — Set in constructor: Yes. Set after construction: No. Set via `with`: No.
-- `init` — Set in constructor: Yes. Set after construction: No. Set via `with`: Yes.
-
-```tyhp
-<?tyhp
-
-class User
-{
-    public init string $name;
-    public init int $age;
-    public string $label = '';
-
-    public function __construct(string $name, int $age)
-    {
-        $this->name = $name;
-        $this->age = $age;
-    }
-}
-
-$user = new User('Alice', 30);
-
-// init properties CANNOT be assigned directly after construction
-// $user->name = 'Bob';  // ERROR: init property
-
-// init properties CAN be set via with (creates a new instance)
-$newUser = clone $user with [name => 'Bob'];
-// $user->name is still 'Alice'
-// $newUser->name is 'Bob'
-```
-
-## Compiled PHP Output for init Properties
-
-The init modifier emits as PHP readonly. For classes with init properties, the compiler generates a __clone() method and a $__tyhpWithInit helper property that enables with to set readonly properties on the cloned instance.
-
-```php
-<?php
-
-class User
-{
-    public readonly string $name;
-    public readonly int $age;
-    public string $label = '';
-
-    /** @internal */
-    public array $__tyhpWithInit = [];
-
-    public function __construct(string $name, int $age, array $__withInit = [])
-    {
-        $this->name = $name;
-        $this->age = $age;
-        if (isset($__withInit['name'])) { $this->name = $__withInit['name']; }
-        if (isset($__withInit['age'])) { $this->age = $__withInit['age']; }
-    }
-
-    public function __clone(): void
-    {
-        foreach ($this->__tyhpWithInit as $__prop => $__val) {
-            match ($__prop) {
-                'name' => $this->name = $__val,
-                'age' => $this->age = $__val,
-                default => null,
-            };
-        }
-        $this->__tyhpWithInit = [];
-    }
-}
-```
-
-## Constructor Property Promotion with init
-
-The init modifier works with constructor property promotion, just like readonly does in PHP.
+Constructor property promotion works as in PHP 8. Constructor parameters may be promoted with visibility and `readonly`. Use `readonly` when a property should be set only during construction. `clone $obj with [...]` can still update `readonly` properties on the copy; see the `with` keyword page.
 
 ```tyhp
 <?tyhp
@@ -264,171 +200,90 @@ The init modifier works with constructor property promotion, just like readonly 
 class Point
 {
     public function __construct(
-        public init float $x,
-        public init float $y,
-        public init float $z = 0.0
-    ) {}
+        public readonly float $x,
+        public readonly float $y,
+        public readonly float $z = 0.0
+    ): void {}
 }
 
 $p = new Point(1.0, 2.0);
 $q = clone $p with [z => 5.0];
-// $p = Point(1.0, 2.0, 0.0)
-// $q = Point(1.0, 2.0, 5.0)
 ```
 
-```php
-<?php
+## Property Accessors (PHP 8.4 Hooks)
 
-class Point
-{
-    /** @internal */
-    public array $__tyhpWithInit = [];
-
-    public function __construct(
-        public readonly float $x,
-        public readonly float $y,
-        public readonly float $z = 0.0,
-        array $__withInit = []
-    ) {
-        if (isset($__withInit['x'])) { $this->x = $__withInit['x']; }
-        if (isset($__withInit['y'])) { $this->y = $__withInit['y']; }
-        if (isset($__withInit['z'])) { $this->z = $__withInit['z']; }
-    }
-
-    public function __clone(): void
-    {
-        foreach ($this->__tyhpWithInit as $__prop => $__val) {
-            match ($__prop) {
-                'x' => $this->x = $__val,
-                'y' => $this->y = $__val,
-                'z' => $this->z = $__val,
-                default => null,
-            };
-        }
-        $this->__tyhpWithInit = [];
-    }
-}
-```
-
-## init vs readonly
+Tyhp supports PHP 8.4 property hooks (`get` / `set`) on class properties. Hook bodies match PHP: a parameter-less `get { ... }`, optional `set { ... }` (the incoming value is `$value`), or a typed `set(string $value) { ... }`. `&get` and `final get` / `final set` are also valid.
 
 ```tyhp
 <?tyhp
 
-class Example
-{
-    public readonly string $fixed;
-    public init string $updatable;
+final class Widget {
+    private string $_name = '';
 
-    public function __construct(string $fixed, string $updatable)
-    {
-        $this->fixed = $fixed;
-        $this->updatable = $updatable;
+    public string $name {
+        get {
+            return $this->_name;
+        }
+        set(string $value) {
+            $this->_name = $value;
+        }
     }
 }
-
-$a = new Example('A', 'B');
-
-// Both are errors — neither can be set directly after construction:
-// $a->fixed = 'X';      // ERROR: readonly
-// $a->updatable = 'X';  // ERROR: init
-
-// readonly CANNOT be set via with:
-// $b = clone $a with [fixed => 'X'];      // ERROR
-
-// init CAN be set via with:
-$c = clone $a with [updatable => 'X'];      // OK
 ```
 
-:::note
-Combining init and readonly on the same property is allowed but redundant — the readonly modifier is strictly more restrictive. The combination is semantically equivalent to just readonly.
-:::
+On PHP 8.4+, the compiler emits native hook syntax. On PHP 8.2–8.3, it lowers the same source through a polyfill (`\Tyhp\Concerns\UsesPropertyAccessors` and `$this->__tyhpPropertyHook`) so hooked properties work without native PHP 8.4 hooks.
 
-:::warning
-The init modifier requires PHP 8.2+ because readonly property reinitialization in __clone() is a PHP 8.2 feature.
-:::
+To **describe** a hooked PHP property in a `.tyhpdef` file, write the bodyless list `{ get; set; }` (or `{ &get; }`). Hook bodies stay in `.tyhp` (and in PHP). See [Classes in Tyhpdef](tyhpdef_classes.md#properties).
 
 ## Best Practices
 
 :::tip
-Use : parent(args...) to clearly express constructor chaining — it ensures the parent constructor is always called first and prevents accidental omission.
+A constructor without a return type is `: void`. Use `: void` (or omit it) when there is no parent call; use `: parent(args...)` when chaining so the parent constructor always runs first.
 :::
 
 :::tip
-Use : void on leaf classes to explicitly document that no parent constructor chaining occurs.
+`: void` on constructors is optional and stripped from PHP output. Omitting it produces the same emitted PHP.
 :::
 
 :::tip
-Use init properties when you want immutability after construction but need to support functional updates via the with keyword.
-:::
-
-:::tip
-Use constructor property promotion with init for concise, immutable data classes.
+Use constructor property promotion with `readonly` for concise, immutable data classes. Update copies with `clone $obj with [...]`.
 :::
 
 ## Common Mistakes
 
 :::danger
-Do not use : parent(...) on a class that has no parent class — the compiler reports an error.
+Do not use : parent(...) on a class that has no parent class — the emitter still inserts `parent::__construct(...)`, which PHP will reject at runtime. Diagnostic TYHP4065 (`CheckerParentWithoutParent`) is for the type name `parent`, not this constructor-chaining form.
 :::
 
-:::danger
-Do not use computed expressions or $this in parent(...) arguments — only static values and incoming parameters are allowed since the parent call happens before the constructor body.
+:::warning
+Prefer not to use `$this` or method calls in parent(...) arguments — the parent call runs before the constructor body. The compiler does not currently reject those expressions.
 :::
 
-:::danger
-Do not manually call parent::__construct() when using : parent(...) — the compiler inserts the call automatically and a manual call would result in a double invocation error.
-:::
-
-:::danger
-Do not use init with property hooks — init requires PHP readonly semantics, which are incompatible with property hooks.
-:::
-
-:::danger
-Do not try to set init properties directly after construction — they can only be set in the constructor or via the with keyword.
+:::warning
+Do not also write a manual `parent::__construct()` when using : parent(...) — the compiler already inserts the call, so a second call would run the parent constructor twice. The compiler does not currently diagnose the duplicate.
 :::
 
 ```tyhp
 <?tyhp
 
-// ERROR: no parent class to chain to
+// Avoid: no parent class to chain to (emits parent::__construct anyway)
 // class NoParent {
 //     public function __construct(): parent() {}
 // }
 
-// ERROR: $this not available in parent args
+// Avoid: $this / method calls in parent args (not a compiler error today)
 // class Bad extends BaseModel {
 //     public function __construct(string $name): parent(true, 0, $this->process($name)) {}
 // }
 
-// ERROR: double parent call
+// Avoid: double parent call (not a compiler error today)
 // class Double extends BaseModel {
 //     public function __construct(string $name): parent(true, 0, $name) {
 //         parent::__construct(true, 0, $name);
 //     }
 // }
-
-// ERROR: init with property hooks
-// class BadHooks {
-//     public init string $name {
-//         get => $this->name;
-//         set => \strtolower($value);
-//     }
-// }
-
-// ERROR: init on a method
-// class BadMethod {
-//     public init function doSomething(): void {}
-// }
 ```
 
 ## Compiler Errors
 
-- Using : parent(...) on a class that does not extend another class.
 - Passing arguments to parent(...) that don't match the parent constructor's parameter types.
-- Using $this or method calls in parent(...) arguments.
-- Manually calling parent::__construct() in the body when : parent(...) is already specified.
-- Using init with property hooks (error code 4056).
-- Assigning to an init property outside the constructor or with keyword (error code 4055).
-- Using init on a method (error code 4003).
-- Combining init with static (modifier conflict).

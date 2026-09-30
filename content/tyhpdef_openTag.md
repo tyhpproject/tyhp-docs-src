@@ -103,5 +103,5 @@ DO keep your Tyhpdef files organized: one file per library or extension, with a 
 :::
 
 :::danger
-DON'T include implementation code in Tyhpdef files. No function bodies, no property initializers, no executable statements. Tyhpdef is declarations only.
+DON'T include ordinary implementation code in Tyhpdef files. No function bodies, no `=` property or const initializers, no executable statements. Optional `?? <value>` on properties and consts records PHP's expected start value; it does not assign. Tyhpdef is declarations only — except inline `extension fn` / `extension operator` members, which require a `=>` mapping expression. See [Extensions in Tyhpdef](tyhpdef_extensions.md).
 :::

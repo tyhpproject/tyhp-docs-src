@@ -19,31 +19,62 @@ function myPhpFunction(string $input): int;
 
 ## Variables and Constants
 
-Declare global PHP variables and constants with types. Use `??` for fallback defaults, `as` for aliasing, and `&` for import-by-reference. Supports `deprecated`/`obsolete` markers.
+Declare global PHP variables and constants with types. Use `as` for aliasing. Top-level `deprecated`/`obsolete` work. Tyhpdef `??` records PHP's expected start value (the live value may differ); `&` is not a tyhpdef form.
 
 <a href="tyhpdef_variablesAndConstants.html">See full documentation →</a>
 
 ```tyhp
-bool $debugMode ?? false;
-string $legacy_app_name as $appName ?? "DefaultApp";
-int &$sharedCounter;
+bool $debugMode;
+string $legacy_app_name as $appName;
 
 const string APP_ENV;
-const float TAX_RATE ?? 0.08;
 const int \MAX_LOOPS_ALLOWED as MAX_LOOPS;
 ```
 
 ## Functions
 
-Declare function signatures with typed parameters (including optional, reference, and variadic), generic type parameters, async functions, function aliases, and extension functions.
+Declare function signatures with typed parameters (including optional, reference, and variadic), generic type parameters, async functions, function aliases, and extension functions. `fallback function` is a signature PHP defines only when that name is still empty; Composer `autoload.files` order chooses among packages. `declare(ext="name")` / `declare(ext="!name")` keeps a block when that extension's tyhpdef package is loaded or absent. Overlay `partial function` (optionally `as`) merges attributes or renames without restating the signature. Version-specific signatures use `#[\Tyhp\Php("…")]` or `declare(php=…)` in `.tyhpdef`.
 
 <a href="tyhpdef_functions.html">See full documentation →</a>
 
 ```tyhp
-function \array_map<T, U>(callable<T, U> $callback, array<T> $array): array<U>;
+function \array_map<T, U>(callable(T): U $callback, array<T> $array): array<U>;
 async function fetchUserData(int $userId): UserData;
 function \array_key_exists as keyExists(int|string $key, array $array): bool;
 function toCamelCase(extends string $str): string;
+
+#[\Tyhp\Php(">=8.2 <8.4")]
+function example(string $v): mixed;
+#[\Tyhp\Php(">=8.4")]
+function example(string $v, bool $strict = false): string;
+```
+
+## Extensions
+
+Attach Tyhp extension methods and operator overloads to PHP types. **Standalone** `extension Name extends Type { }` (or nested `extends Type { }` groups, with no header target) uses short `fn` / `operator` + `=>` members; `$this` is the block target; return types required; empty `{}` is an error. Class-body `extension fn` / `extension operator` are **thin mappings** (`=>` only, fully erased; PHP cannot call them; `$this` / `self` are the enclosing class). File-level `use extension` is opt-in unless `global use extension`. `tyhp/core` globally imports `\Tyhp\StringExtensions` and the other scalar catalogs. `use extension` on a tyhpdef class auto-activates that type’s attached surface. Bodyless `operator …;` is native PHP passthrough; bodyless `extension operator` is an error. `hide` / operator `insteadof` are allowed; `as` on operators is an error. `#[\Tyhp\Php]` is illegal on `extension { }` (**TYHP4304**); wrap with `declare(php=…)`. Multi-statement bodies live in `tyhp_src/` with `class PhpName as Name__tyhpExtensionBacker`.
+
+<a href="tyhpdef_extensions.html">See full documentation →</a>
+
+```tyhp
+extension StringOperators extends string {
+    fn toUpper(): string
+        => StringOperators__tyhpExtensionBacker::toUpper($this);
+    operator * (self $left, int $right): string
+        => StringOperators__tyhpExtensionBacker::__multiply($left, $right);
+}
+
+class Money {
+    public function plus(Money $other): Money;
+
+    extension operator +(self $left, self $right): self => $left->plus($right);
+
+    extension fn formatCurrency(string $locale = "en_US"): string
+        => $locale . " " . $this->__toString();
+
+    use extension MoneyFormatting {
+        MoneyFormatting::format as formatExtended;
+    };
+}
 ```
 
 ## Interfaces
@@ -65,14 +96,19 @@ interface Stream extends Readable, Writable {
 
 ## Classes
 
-Declare PHP classes with properties, methods, constructors (with parameter promotion), constants, extends/implements, generics, trait usage, operator overloads, and class aliasing with `as`.
+Declare PHP classes with properties (including optional `??` expected start values and bodyless hooked `{ get; set; }` / `{ &get; }`), methods, constructors (with parameter promotion — property `??`, parameter `=`), constants (`??` only, not `=`), extends/implements, generics, trait usage, native `operator` members, class aliasing with `as`, and base/`include` `partial` (additive members; duplicate = error; missing target = error; `omit` is overlay-only). A reserved-word short name (`is`, `isset`, …) is written fully qualified (`class \Hamcrest\Core\Is`). Overlay last-wins brace `partial`, header-only `partial class Foo<T>;`, `partial function`, and `omit` are documented in [Tyhpdef Overlays](tyhpdef_overlays.md).
 
 <a href="tyhpdef_classes.html">See full documentation →</a>
 
 ```tyhp
 class Collection<T> {
     public function add(T $item): void;
-    public function map<U>(callable<T, U> $transform): Collection<U>;
+    public function map<U>(callable(T): U $transform): Collection<U>;
+}
+
+class Holder {
+    public string $name { get; set; }
+    public array $items { &get; set; }
 }
 
 class \Vendor\LongNamespace\SomeClass as ShortName {
@@ -80,9 +116,51 @@ class \Vendor\LongNamespace\SomeClass as ShortName {
 }
 ```
 
+## Overlays
+
+`extra.tyhp.package` `"include"` on `composer.json` is the baseline (duplicates error). `"overlay"` loads after, stubs then hand, last Tyhp name wins. Overlay brace `partial` replaces listed members (missing target = warning). Overlay `partial class Foo<T> implements …;` (also interface / trait / enum) replaces written header clauses and keeps unlisted members. Overlay `partial function` merges attributes onto an existing callable without restating the signature. `partial function X as Y;` and `partial class X as Y;` **rename** the current Tyhp name unless the same overlay file also keeps `X`. Match later overlays to the live Tyhp name. `omit` hides a symbol (overlay-only). `// @overlay-against:` stamps the Layer 1 signature. `tyhp overlay create` / `stamp`. `tyhp symbol_tree` dumps the bound names.
+
+<a href="tyhpdef_overlays.html">See full documentation →</a>
+
+```tyhp
+<?tyhpdef
+// @overlay-against: interface Iterator extends Traversable
+partial interface Iterator<TKey = mixed, TValue = mixed> extends \Traversable<TKey, TValue>;
+partial interface Iterator {
+    public function current(): TValue;
+}
+
+omit function \array_map();
+
+#[\Tyhp\Optimize\Pure]
+partial function \str_contains;
+partial function \strtolower as str2LC;
+partial function \strtoupper;
+partial function \strtoupper as str2UC;
+
+partial class SplObjectStorage;
+partial class SplObjectStorage as ObjectStorage;
+```
+
+## Extern names
+
+Name-only placeholders for types, functions, or constants this package mentions but does not own (`suggest` / `require-dev` Composer peers, optional extensions, author-only tyhpdefs). Legal in tyhpdef signatures; not usable in `.tyhp` (`TYHP4307`). A real declaration of the same name silently replaces the placeholder. Use `extern \Name;` when the kind is unknown. When the kind is known, write the same kind as the originating declaration (`extern interface` for an `interface`); a mismatch is `TYHP8029`. `tyhp build` writes author-only owners into `package.tyhpdef`; `--package-path` / `--source` write `_tyhpdef/externs.tyhpdef`.
+
+<a href="tyhpdef_extern.html">See full documentation →</a>
+
+```tyhp
+<?tyhpdef
+extern \Elastica\Client;
+// @provided-by: tyhpdef/php-ext-curl
+extern class \CurlHandle;
+extern interface \Psr\Log\LoggerInterface;
+extern function \bcadd;
+extern const \GMP_ROUND_PLUSINF;
+```
+
 ## Enums
 
-Declare unit enums (no backing value) and backed enums (`string` or `int`). Supports case values, methods, interface implementation, constants, aliasing, and deprecated cases.
+Declare unit enums (no backing value) and backed enums (`string` or `int`). Supports case values, methods, interface implementation, constants, aliasing, and deprecated cases. Every enum is `\UnitEnum` (and `\BackedEnum` when backed) without listing those interfaces; harvested stubs may keep them. Do not redeclare `cases` / `from` / `tryFrom`.
 
 <a href="tyhpdef_enums.html">See full documentation →</a>
 
@@ -118,27 +196,27 @@ use Collection<User>;
 
 ## Structs
 
-Value types backed by PHP associative arrays. Support required and optional properties, property aliases for non-identifier array keys, defaults, inheritance, nesting, and generics.
+Value types backed by PHP associative arrays. Named as `type Name = struct { … };`. Support required and optional properties, property aliases for non-identifier array keys, defaults, inheritance, nesting, generics, and inline `struct { … }` in type position.
 
 <a href="tyhpdef_structs.html">See full documentation →</a>
 
 ```tyhp
-struct UserProfile {
+type UserProfile = struct {
     string $name;
     ?string $bio;
     string $role = "user";
-}
+};
 
-struct ApiResponse<T> {
+type ApiResponse<T> = struct {
     bool $success;
     ?T $data;
     ?string 'Reply-To' as $replyTo;
-}
+};
 ```
 
 ## Type Aliases
 
-Create named aliases for complex type expressions using the `type` keyword. Supports generic parameters with constraints. Allowed at root level or inside namespace blocks.
+Create named aliases for complex type expressions using the `type` keyword. Supports generic parameters with constraints. Allowed at root level or inside namespace blocks. Tyhpdef aliases are type-only: they do not emit a PHP factory; `typeof` inlines the body.
 
 <a href="tyhpdef_typeAliases.html">See full documentation →</a>
 
@@ -146,7 +224,7 @@ Create named aliases for complex type expressions using the `type` keyword. Supp
 type Scalar = int|float|string|bool;
 type StatusCode = 200|301|302|404|500;
 type Result<T, TError extends \Throwable> = T|TError;
-type Predicate<T> = callable<T, bool>;
+type Predicate<T> = callable(T): bool;
 ```
 
 ## Namespaces
@@ -187,9 +265,9 @@ Declare multiple signatures for the same function/method name to describe PHP fu
 <a href="tyhpdef_overloadedFunctions.html">See full documentation →</a>
 
 ```tyhp
-function \json_decode(string $json, true $assoc): array<string, mixed>;
-function \json_decode(string $json, false $assoc): object;
-function \json_decode(string $json, null $assoc = null): mixed;
+function \json_decode(string $json, true $assoc): JsonAssoc|null;
+function \json_decode(string $json, false $assoc): JsonObject|null;
+function \json_decode(string $json, null $assoc = null): JsonObject|null;
 
 public function find(int $id): ?User;
 public function find(string $uuid): ?User;
@@ -198,18 +276,18 @@ public function find(array<string, mixed> $criteria): array<User>;
 
 ## The `deprecated` and `obsolete` Keywords
 
-`deprecated` produces a compiler warning but still compiles. `obsolete` produces a compiler error and blocks compilation. Both must appear before all other modifiers. Can be applied to functions, classes, interfaces, traits, enums, methods, properties, constants, and enum cases.
+`deprecated` produces a compiler warning but still compiles. `obsolete` produces a compiler error and blocks compilation. Both must appear before all other modifiers. In this alpha they are enforced on **top-level** functions, classes, interfaces, traits, enums, constants, and variables — not on class/interface members or enum cases.
 
 <a href="tyhpdef_deprecatedKeyword.html">See full documentation →</a>
 
 ```tyhp
-deprecated function \mysql_connect(string $server, string $user, string $pass): resource|false;
+deprecated function \mysql_connect(string $server, string $user, string $pass): \mysqli|false;
 obsolete function \md5(string $string, bool $binary = false): string;
 ```
 
 ## Runtime Errors and Exceptions
 
-When tyhpdef declarations don't match actual PHP code, runtime errors can occur. Declare exception hierarchies, use `@throws` annotations, and provide fallback defaults with `??` to prevent type mismatch errors.
+When tyhpdef declarations don't match actual PHP code, runtime errors can occur. Declare exception hierarchies and document throws with `@throws` (documentation only in this alpha).
 
 <a href="tyhpdef_runTimeErrorsAndExceptions.html">See full documentation →</a>
 

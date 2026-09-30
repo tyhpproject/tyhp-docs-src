@@ -109,14 +109,14 @@ Build failed with 3 errors and 1 warning.
 ```status
 tier: 1
 story: '14'
-state: planned
+state: complete
 ```
 
 Beyond the basic <code>file(line,column): severity CODE: message</code> format, the Tyhp compiler renders diagnostics with rich, developer-focused detail. The renderer reuses the same diagnostic data carried by every phase, so text, JSON, and SARIF output stay consistent.
 
 - Source spans and underlines — The text renderer prints the offending source line with a caret/underline beneath the primary span, plus labeled secondary spans that point at related locations (similar to the Rust compiler). Output degrades gracefully to a single line when <code>--quiet</code> is set.
 - "Did you mean" suggestions — When the binder or checker reports an unknown symbol, type, or member, it attaches a Levenshtein-based suggestion drawn from the in-scope symbol table, surfaced as a <code>help:</code> hint in text output and as a machine-applicable fix in JSON and SARIF.
-- Actionable fixes — Suggestions carry a span and replacement text, providing the data contract that drives <code>tyhp lint --fix</code>. Language server code actions are planned.
+- Actionable fixes — Suggestions carry a span and replacement text, providing the data contract that drives <code>tyhp lint --fix</code>. The language server exposes the same import quick fixes as LSP code actions (auto-import and remove unused import).
 - The <code>--explain</code> command — Run <code>tyhp --explain TYHP4008</code> to print the long-form explanation for any diagnostic code. The error index is generated directly from the compiler's code registry, so it always matches the codes the compiler emits.
 
 Diagnostic messages follow a consistent style: present tense, the offending symbol or type named in backticks, and "expected X, found Y" framing. A build-time consistency gate enforces that every diagnostic code has conforming message text and vice versa.
@@ -170,20 +170,22 @@ These occur when visibility or member modifiers are used incorrectly. Examples: 
 4. Look up the error code -- Use the Diagnostic Code Reference page to find detailed explanations and fix guidance for any error code.
 5. Check your tyhpdef files -- If you see TYHP3003 (symbol not found) for a PHP library class, ensure the corresponding tyhpdef files are loaded. Check your <code>tyhp.json</code> tyhpdef include paths.
 6. Use strict mode judiciously -- The <code>--strict</code> flag treats warnings as errors. This is useful for CI pipelines but may be noisy during active development.
-7. Check the target PHP version -- Some features require specific PHP versions (e.g., property hooks require PHP 8.4+, readonly properties require PHP 8.1+). Verify your <code>output.phpVersion</code> in <code>tyhp.json</code>.
+7. Check the target PHP version -- Some features depend on <code>output.phpVersion</code> (e.g., property hooks emit native syntax at PHP 8.4+ and a polyfill below 8.4; readonly properties require PHP 8.1+). Verify your <code>output.phpVersion</code> in <code>tyhp.json</code>.
 
 ## JSON Output Format
 
 For CI/CD integration, the <code>tyhp lint</code> command supports JSON output via the <code>--format json</code> flag. Each diagnostic is serialized as a JSON object:
 
-```tyhp
+JSON `range` coordinates are **0-based lines** (text diagnostics are 1-based). Column is 0-based in both. Line 42 in text output is `"line": 41` here:
+
+```json
 {
   "severity": "error",
   "code": "TYHP4008",
   "file": "src/Models/User.tyhp",
   "range": {
-    "start": { "line": 42, "column": 5 },
-    "end": { "line": 42, "column": 15 }
+    "start": { "line": 41, "column": 5 },
+    "end": { "line": 41, "column": 15 }
   },
   "message": "Cannot assign type 'string' to type 'int'"
 }

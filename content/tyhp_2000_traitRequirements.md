@@ -141,18 +141,7 @@ class Widget
 
 ## Compiled PHP Output for Property Aliasing
 
-The compiler resolves the property aliasing and emits the appropriate PHP code. The alias becomes a separate property declaration in the class.
-
-```php
-<?php
-
-class Widget
-{
-    use HasName, HasLabel {
-        HasLabel::$name as $label;
-    }
-}
-```
+PHP cannot alias properties in a `use` adaptation block. This alpha still **parses** `HasLabel::$name as $label` and emits it as a PHP `use` alias (`HasLabel::$name as $label`), which PHP will reject. It does **not** rewrite the alias into a separate property declaration. Prefer distinct property names on the traits, or copy the value in the class constructor, until emit is fixed.
 
 ## Multiple Requirements
 
@@ -191,6 +180,8 @@ Use trait property aliasing to resolve property name conflicts between traits in
 :::tip
 Prefer implements requirements over extends requirements when possible — interface requirements are more flexible and don't tie the trait to a specific class hierarchy.
 :::
+
+A trait must not require `\Traversable`. Require `\Iterator` or `\IteratorAggregate` instead (**TYHP4326**). A trait must not require `\UnitEnum` or `\BackedEnum` (**TYHP4337**). See [New and Changed Types](tyhp_0150_newTypes.md#the-traversabletkey-tvalue-type) and [The `\UnitEnum` and `\BackedEnum<TValue>` Types](tyhp_0150_newTypes.md#the-unitenum-and-backedenumtvalue-types).
 
 ## Common Mistakes
 

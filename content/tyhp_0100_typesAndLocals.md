@@ -1,12 +1,12 @@
 ---
-title: 'Strongly Typed'
+title: 'Types and Locals'
 status:
   tier: 0
   story: '08'
   state: complete
 ---
 
-The primary feature of Tyhp is making PHP strongly typed. While PHP allows optional type hints in some places, Tyhp enforces explicit typing throughout your code. Every variable, parameter, property, and return type must have an explicit type declaration or be inferable from context. In Tyhp, we do not refer to these as "type hints" since they are not hints -- they are enforced type declarations. All types are also non-nullable by default: `string $x` means `$x` can only hold a `string`, never `null`. To allow null, you must explicitly declare the type as nullable: `?string $x` or `string|null $x`.
+Tyhp requires types throughout `<?tyhp` source. PHP’s type declarations are optional; in Tyhp they are required or inferred. Locals use `$var = …` as the primary form — the type is inferred from the first assignment. Write `int $x = …` when inference is not enough. Parameters, properties, and return types still need a type. These are not optional “type hints” — they are enforced. Types are also non-nullable by default: `string $x` means `$x` can only hold a `string`, never `null`. To allow null, declare the type as nullable: `?string $x` or `string|null $x`.
 
 ## Where Types Are Required
 
@@ -15,21 +15,44 @@ The places in PHP that already support optional type hints are required to be ty
 - Class, interface, and trait properties
 - Method and function parameters
 - Method and function return types
-- Class and object constants (typed constants)
+- Class, interface, trait, and enum constants (a type is required on the original declaration; a child redeclaration may omit it and inherits that type invariantly)
 
 Additionally, Tyhp requires types for:
 
-- Variables -- either an explicit type declaration or type inference on first assignment
-- Closure / arrow function parameters and return types
+- Variables -- inferred from the first assignment (`$sum = 0;`), or an explicit `int $x = …` when inference is not enough
+- Closure / arrow function parameters and return types — required unless the type is inferable from an expected callable type
 - Catch block exception types
+
+File-level `const NAME = value;` is untyped (PHP has no typed file-level constants). Write the type on a class constant, or describe an existing PHP constant in `.tyhpdef` as `const int NAME;`.
+
+`foreach` bindings may be typed (`foreach ($xs as int $k => string $v)` or value-only `foreach ($xs as string $v)`). The iterable’s key and value types must be assignable to those annotations; the loop variables then have the **declared** types and are not narrowed further. Omitting the types infers key and value from the iterable.
 
 ## Variable Type Declarations
 
-There are two ways to type a variable in Tyhp: explicit type declaration and type inference.
+The primary form for locals is inference from the first assignment. An explicit `Type $var` declaration is legal when inference is not enough.
 
-## 1. Explicit Type Declaration
+## 1. Type Inference from First Assignment
 
-You can declare a variable's type by placing the type before the variable name. This is similar to typed properties in PHP classes, but extended to all variables in any scope.
+When you assign a value to a variable without an explicit type declaration, Tyhp infers the type from the right-hand side. The inferred type is locked in at the first assignment and cannot change. The inference uses the narrowest possible type based on the expression. No `var` or `auto` keyword is needed — the absence of a type annotation combined with an assignment is sufficient.
+
+```tyhp
+<?tyhp
+
+$sum = 0;                  // Inferred as `int`
+$myStr = "asdf";           // Inferred as `string`
+$myBool = \canIMoveThis(); // Inferred from the function's return type
+$price = 19.99;            // Inferred as `float`
+$amount = \Tyhp\decimal('1.89'); // Inferred as `decimal`
+$items = [1, 2, 3];       // Inferred as `array<int>` (list shorthand for `array<int|string, int>`)
+```
+
+:::note
+Type inference only works on the first assignment. If a variable has no type annotation and no initializer, the compiler reports an error requiring either an explicit type or an initial value.
+:::
+
+## 2. Explicit Type Declaration
+
+Write a type before the variable name when there is no initializer, or when you need a wider type than inference would give. This is similar to typed properties in PHP classes, but extended to all variables in any scope.
 
 ```tyhp
 <?tyhp
@@ -41,11 +64,11 @@ bool $myBool;
 // Assign a value to the typed variable
 $myBool = \isDatabaseServerUp();
 
-// Declare and assign in one statement
-string $myStr = "hello world";
+// Declare and assign in one statement when inference is not enough
+int $total = 0;
 
 // Union types are supported
-string|int $myKey = $myBool ? 1 : $myStr;
+string|int $myKey = $myBool ? 1 : "hello";
 
 // Since $myKey is a union type, either branch is valid
 $myKey = "foo";
@@ -66,33 +89,13 @@ Tyhp also supports parenthesized type declarations, where the type is wrapped in
 // Parenthesized type declaration
 (string) $myStr = "hello";
 (int|float) $number = 3.14;
-(decimal) $price = 19.99d;
+(decimal) $price = \Tyhp\decimal('19.99');
 
 // Equivalent to:
 string $myStr2 = "hello";
 int|float $number2 = 3.14;
-decimal $price2 = 19.99d;
+decimal $price2 = \Tyhp\decimal('19.99');
 ```
-
-## 2. Type Inference from First Assignment
-
-When you assign a value to a variable without an explicit type declaration, Tyhp automatically infers the type from the right-hand side expression. The inferred type is locked in at the first assignment and cannot change. The inference uses the narrowest possible type based on the expression. No `var` or `auto` keyword is needed -- the absence of a type annotation combined with an assignment is sufficient.
-
-```tyhp
-<?tyhp
-
-// Type is inferred from the assigned value
-$myStr = "asdf";           // Inferred as `string`
-$myBool = \canIMoveThis(); // Inferred from the function's return type
-$price = 19.99;            // Inferred as `float`
-$discount = 1.89d;         // Inferred as `decimal`
-$count = 42;              // Inferred as `int`
-$items = [1, 2, 3];       // Inferred as `array<int>`
-```
-
-:::note
-Type inference only works on the first assignment. If a variable has no type annotation and no initializer, the compiler reports an error requiring either an explicit type or an initial value.
-:::
 
 ## Non-Nullable by Default
 
@@ -109,9 +112,26 @@ string $name = "Alice";
 string|null $alsoNullable = null;  // Also OK
 ```
 
+## Closure and Arrow Parameter Inference
+
+Named function and method parameters always need an explicit type. Closure and arrow-function parameters also need a type, unless the expected callable type supplies it. If there is no expected callable type (or the parameter cannot be inferred), the compiler requires an annotation.
+
+```tyhp
+<?tyhp
+
+// $u is inferred as User from the expected callable type
+callable(User): bool $isAdult = fn ($u) => $u->age > 18;
+
+// Same inference when the expected type is a Closure
+\Closure<callable(User): bool> $alsoAdult = fn ($u) => $u->age > 18;
+
+// No expected type — annotate the parameter
+$double = fn (int $n): int => $n * 2;
+```
+
 ## Type Immutability
 
-Once a variable is typed -- whether explicitly declared or inferred -- its type is immutable. You cannot assign a value of an incompatible type, and you cannot re-declare a variable with a different type in the same scope.
+Once a variable is typed -- whether explicitly declared or inferred -- its type is immutable. You cannot assign a value of an incompatible type, and you cannot re-declare a variable with a different type in the same scope. `unset($x)` does not let you redeclare `$x` with a new type.
 
 ```tyhp
 <?tyhp
@@ -125,26 +145,6 @@ string $myStr = "hello";
 // int $myStr = 42;
 ```
 
-## The `unset` + Re-declare Pattern
-
-If you need to change a variable's type, you must first `unset` it and then re-declare it. The `unset` call removes the variable from the current scope, allowing a fresh declaration.
-
-```tyhp
-<?tyhp
-
-string $myStr = "hello";
-
-// Remove the variable from scope
-unset($myStr);
-
-// Now re-declare with a different type
-int $myStr = 42;  // OK: previous declaration was unset
-```
-
-:::warning
-The `unset` call must be in the same scope where the variable was declared. You cannot `unset` a variable from a parent scope.
-:::
-
 ## Array and Generic Types
 
 Tyhp extends PHP's `array` type with generic parameters for type-safe collections. See the New Types page for the full list of generic types.
@@ -152,7 +152,7 @@ Tyhp extends PHP's `array` type with generic parameters for type-safe collection
 ```tyhp
 <?tyhp
 
-// Typed arrays using generics
+// Typed arrays using generics (`array<string>` is list shorthand for `array<int|string, string>`)
 array<string> $names = ["Alice", "Bob"];
 array<string, int> $ages = ["Alice" => 30, "Bob" => 25];
 
@@ -225,11 +225,11 @@ Don't assign a value of an incompatible type to a typed variable. Once a variabl
 :::
 
 :::danger
-Don't try to re-declare a variable's type without unsetting it first. Duplicate type declarations in the same scope produce a `BinderDuplicateSymbolDeclaration` error.
+Don't try to re-declare a variable's type in the same scope. Duplicate type declarations produce a `BinderDuplicateSymbolDeclaration` error. `unset()` does not start a new typed declaration.
 :::
 
 :::danger
-Don't use `mixed` as a type unless absolutely necessary. Tyhp's strong type system should eliminate most needs for `mixed` -- prefer specific types or union types.
+Don't use `mixed` as a type unless absolutely necessary. Tyhp's type system should eliminate most needs for `mixed` -- prefer specific types or union types.
 :::
 
 :::danger

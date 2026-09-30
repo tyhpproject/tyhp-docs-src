@@ -12,7 +12,7 @@ Bref provides PHP runtimes and tooling for deploying PHP applications as serverl
 
 Tyhp and Bref operate at completely different layers of the stack:
 
-- Tyhp is a language and compiler that adds strong typing and modern language features to PHP. It operates at the source code level.
+- Tyhp is a language and compiler: a typed superset of the PHP language. It operates at the source level and emits PHP.
 - Bref is a deployment tool that runs PHP on serverless infrastructure. It operates at the infrastructure and runtime level.
 - Tyhp compiles to standard PHP. Bref runs standard PHP. They do not overlap or conflict.
 
@@ -20,7 +20,7 @@ Tyhp and Bref operate at completely different layers of the stack:
 
 Because Tyhp compiles to standard PHP, using Tyhp with Bref is straightforward:
 
-1. Write your application in Tyhp with full type safety and modern language features.
+1. Write your application in Tyhp.
 2. Compile your Tyhp code to PHP using the Tyhp compiler.
 3. Deploy the compiled PHP code to AWS Lambda using Bref, exactly as you would deploy any PHP application.
 4. Optionally, describe Bref's PHP libraries in Tyhpdef files for type-safe usage within your Tyhp code.

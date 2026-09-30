@@ -46,7 +46,7 @@ echo nameof($user->greet);        // 'greet'
 // Class constant
 echo nameof(User::MAX_AGE);       // 'MAX_AGE'
 
-// PropertyPath-style arrow fn — last segment only (Story 16)
+// PropertyPath-style arrow fn — last segment only
 echo nameof(fn (User $u) => $u->name);        // 'name'
 echo nameof(fn (User $u) => $u->address->city); // 'city'
 ```
@@ -62,6 +62,8 @@ echo 'name';
 echo 'age';
 echo 'greet';
 echo 'MAX_AGE';
+echo 'name';
+echo 'city';
 ```
 
 A common use case for nameof() is in error messages, logging, and validation — any place where you reference a symbol by name as a string. Using nameof() instead of a hardcoded string ensures the reference stays valid when the symbol is renamed.
@@ -110,27 +112,26 @@ $query->orderBy('name');
 nameof() is refactoring-safe. If you rename a property, method, variable, or class, all nameof() references update automatically during compilation, preventing stale string references.
 :::
 
-## typeof() — Get Type at Compile Time
+## typeof() — Get a `\Tyhp\Type` from a type
 
-The typeof() construct returns a \Tyhp\Type instance representing the compile-time type of its argument. It accepts type names (like int, string, User) and compiles to \Tyhp\Type::of() calls. This is different from PHP's gettype() which is a runtime function returning a string — typeof() is a compile-time construct that produces a \Tyhp\Type object for use with Tyhp's runtime type system.
+The typeof() construct returns a `\Tyhp\Type` instance for a type expression. It accepts types (`int`, `User`, `int|string`, `Optional<int>`, `?int`, `T`). Scalars compile to `\Tyhp\Type::int()` / `::string()` / etc.; declared classes compile to `\Tyhp\Type::fromClassName(...)`; structs compile to `\Tyhp\Type::struct(...)` with the property schema; source type aliases compile to a factory call (`UserId()`, `Optional(\Tyhp\Type::int())`). This is different from PHP's gettype() (a runtime string) and from `\Tyhp\Type::of($value)` (runtime inspection of a value).
 
 ```tyhp
 <?tyhp
 
-// typeof with scalar type names
+type UserId = int;
+type Optional<T = mixed> = T|null;
+
 \Tyhp\Type $intType = typeof(int);
-\Tyhp\Type $stringType = typeof(string);
-
-// typeof with class names
+\Tyhp\Type $unionType = typeof(int|string);
 \Tyhp\Type $userType = typeof(User);
-\Tyhp\Type $dateType = typeof(\DateTimeInterface);
+\Tyhp\Type $idType = typeof(UserId);
+\Tyhp\Type $optType = typeof(Optional<int>);
 
-// Use for runtime type checks with the Tyhp type system
 if (\Tyhp\Type::is($value, typeof(string))) {
     echo 'Value is a string';
 }
 
-// Use in generic contexts for runtime type information
 class Repository<T> {
     public function getEntityType(): \Tyhp\Type {
         return typeof(T);
@@ -141,19 +142,22 @@ class Repository<T> {
 ```php
 <?php
 
-// typeof() compiles to \Tyhp\Type::of() calls
-// Scalar types use string identifiers
-$intType = \Tyhp\Type::of('int');
-$stringType = \Tyhp\Type::of('string');
+$intType = \Tyhp\Type::int();
+$unionType = \Tyhp\Type::union(\Tyhp\Type::int(), \Tyhp\Type::string());
+$userType = \Tyhp\Type::fromClassName(User::class);
+$idType = UserId();
+$optType = Optional(\Tyhp\Type::int());
 
-// Class types use ::class syntax
-$userType = \Tyhp\Type::of(User::class);
-$dateType = \Tyhp\Type::of(\DateTimeInterface::class);
-
-if (\Tyhp\Type::is($value, \Tyhp\Type::of('string'))) {
+if (\Tyhp\Type::is($value, \Tyhp\Type::string())) {
     echo 'Value is a string';
 }
+
+return ($this->__tyhpGeneric->resolvedType(\Repository::class, 'T'));
 ```
+
+`typeof(UserId)` and `UserId()` emit the same factory call. `typeof(Optional<int>)` is how to spell a generic alias as a Type value; `Optional(typeof(int))` is the factory with a `\Tyhp\Type` argument. `Optional<int>()` is invalid.
+
+Inspect a **value** with `\Tyhp\Type::of($value)`, not `typeof`.
 
 ## default() — Get Default Value for a Type
 
@@ -161,6 +165,8 @@ The default() construct returns the default value for a given type. The argument
 
 ```tyhp
 <?tyhp
+
+type UserId = int;
 
 // Scalar type defaults
 int $i = default(int);         // 0
@@ -175,6 +181,9 @@ array $a = default(array);     // []
 
 // Object types default to null
 ?User $u = default(User);      // null
+
+// Source type alias — emits UserId()->defaultValue()
+int $id = default(UserId);
 
 // Useful in generic code
 function getOrDefault<T>(array $data, string $key): T {
@@ -203,6 +212,7 @@ $a = [];
 $ni = null;
 $ns = null;
 $u = null;
+$id = UserId()->defaultValue();
 
 function sum(array $values): int {
     $total = 0;
@@ -243,7 +253,7 @@ Returns null for any object/class type
 
 ## variable_exists() — Compile-Time Variable Existence Check
 
-The variable_exists() construct checks if a variable is declared in the current scope. When the compiler can determine the answer statically, it emits a boolean literal (true or false). When the answer depends on runtime conditions, it emits an isset() check.
+The variable_exists() construct checks if a variable is declared in the current scope. When the compiler can determine the answer statically, it emits a boolean literal (true or false). When the answer depends on runtime conditions, it emits `\array_key_exists('name', \get_defined_vars())` — not `isset()`, so a variable that exists and holds `null` still counts as present.
 
 ```tyhp
 <?tyhp
@@ -274,7 +284,7 @@ function processConfig(): void {
 <?php
 
 // variable_exists() compiles to true/false literals
-// or isset() depending on compile-time knowledge
+// or array_key_exists + get_defined_vars when the answer is not folded
 $name = 'Alice';
 
 if (true) {
@@ -286,7 +296,7 @@ if (false) {
 }
 
 function processConfig(): void {
-    if (isset($customHandler)) {
+    if (\array_key_exists('customHandler', \get_defined_vars())) {
         $customHandler();
     } else {
         defaultHandler();
@@ -296,15 +306,16 @@ function processConfig(): void {
 
 ## Other Compile-Time Features
 
-Beyond the four compile-time constructs above, Tyhp has several other features that are resolved entirely at compile time and produce no runtime overhead. These features exist only during compilation and are erased from the PHP output.
+Beyond the four compile-time constructs above, Tyhp has several other features that are resolved entirely at compile time and erased from the type system. Most produce no PHP output at all; type-alias hints are the same way, though a source alias *declaration* also emits a small runtime factory (see below).
 
-- Type aliases (type MyType = int|string) — resolved during compilation, erased from PHP output. All references to the alias are replaced with the underlying type.
+- Type aliases (`type MyType = int|string`) — hints expand to the underlying type with no runtime trace. A source `.tyhp` alias *declaration* also emits a `\Tyhp\Type` factory (`UserId()`, `Optional(\Tyhp\Type::int())`) so PHP and `typeof` can name it at runtime. Tyhpdef aliases inline unless they carry `#[\Tyhp\GenericRuntime(aliasFactory: …)]`. See [Type Aliases](tyhp_0700_typeAliases.md).
 - Structs — compiled to PHP associative arrays. Struct declarations are erased; struct property access compiles to array key access.
-- Generics — type parameters are erased via type erasure. Generic annotations produce no PHP code. Optional runtime type tracking is available via the GenericObject trait.
+- Generics — type parameters are erased from PHP signatures. Tracking (`HasGenerics`, factories, binders) is emitted only when the bound type is used at runtime or a generic-typed property remains. Every emitted generic class/method/function is stamped `#[\Tyhp\GenericRuntime]`. Foreign compiled-library sites use `\Tyhp\Generic::bind`; PHP / `typeof` interop for aliases still uses `aliasFactory` (not `bind`). See [Generics](tyhp_0500_generics.md).
 - Static value types (__ClassName, __FunctionName, etc.) — compile-time string subtypes that are erased to plain string in PHP output.
 - Type guard return types ($param is Type) — compiled to bool return type in PHP output. The type narrowing information is used only by the checker.
 - Function overload signatures — only the implementation body is emitted to PHP. Overload signatures are compile-time declarations for the checker.
 - Trait extends/implements requirements — validated at compile time, stripped from PHP output. PHP traits cannot extend or implement.
+- PHP version gates (`declare(php=…)` and `#[\Tyhp\Php]`) — never written to PHP, same treatment as `declare(output_file=…)`. A gate that holds for only some versions at or above `output.phpVersion` becomes a `\PHP_VERSION_ID` check in the output. See [PHP Version Gating](tyhp_0320_phpVersionGating.md).
 - The is keyword (alias for instanceof) — compiled to standard PHP instanceof operator.
 
 ## Best Practices
@@ -318,11 +329,11 @@ Use default(T) in generic code to get type-appropriate zero values. This elimina
 :::
 
 :::tip
-Use typeof() for runtime type introspection that integrates with Tyhp's \Tyhp\Type system. It provides structured type information instead of raw strings.
+Use typeof() when you need a `\Tyhp\Type` value for a type (`typeof(int)`, `typeof(UserId)`, `typeof(Optional<int>)`). For a class-name string, use `nameof(User)` or `User::class`. To inspect a value, use `\Tyhp\Type::of($value)`.
 :::
 
 :::tip
-Use variable_exists() instead of isset() when you need to check whether a variable is declared in scope. variable_exists() is a compile-time construct that the compiler can optimize to a boolean literal.
+Use variable_exists() instead of isset() when you need to check whether a variable is declared in scope. variable_exists() is a compile-time construct that the compiler can fold to a boolean literal, or emit as `\array_key_exists(..., \get_defined_vars())`.
 :::
 
 ## Common Mistakes
@@ -332,7 +343,7 @@ Passing expressions to nameof(). Only variables, properties, methods, constants,
 :::
 
 :::danger
-Confusing typeof() with PHP's \gettype(). typeof() is a compile-time construct that returns a \Tyhp\Type object. PHP's \gettype() is a runtime function that returns a string like 'integer' or 'string'. They serve different purposes and are not interchangeable.
+Confusing typeof() with PHP's \gettype() or with `\Tyhp\Type::of($value)`. typeof() takes a type (`typeof(int)`, `typeof(UserId)`, `typeof(Optional<int>)`) and returns a `\Tyhp\Type` object. PHP's \gettype() returns a string like 'integer'. `\Tyhp\Type::of($value)` inspects a value at runtime.
 :::
 
 :::danger

@@ -8,6 +8,8 @@ status:
 
 Tyhpdef lets you describe existing PHP enums to the Tyhp compiler. PHP supports two kinds of enums: unit enums (no backing value) and backed enums (each case has a string or int value). Both are fully supported in Tyhpdef, along with methods, interface implementations, and constants.
 
+Every enum is `\UnitEnum` without a written `implements`. A backed enum is also `\BackedEnum`. `cases()` resolves on every enum; backed enums also have `from()` / `tryFrom()`. Harvested stubs may keep `implements \UnitEnum` / `\BackedEnum`. Do not redeclare `cases`, `from`, or `tryFrom`.
+
 ## Unit Enums
 
 A unit enum has no backing type. Each case is a standalone value with no associated scalar.
@@ -22,9 +24,11 @@ enum Status {
 }
 ```
 
+A reserved-word short name is written fully qualified. See [Reserved-word type names](tyhpdef_classes.md#reserved-word-type-names).
+
 ## Backed Enums
 
-A backed enum associates each case with a scalar value of a specific type — either `string` or `int`. When importing a backed enum in Tyhpdef, specifying case values is optional. Cases with explicit values enable exact-value type matching, while cases without values match the backing type generally.
+A backed enum associates each case with a scalar value of a specific type — either `string` or `int`. When importing a backed enum in Tyhpdef, specifying case values is optional. The checker validates values that **are** present; omitted values are not treated as “matches any int/string.” Prefer listing known values when you have them.
 
 ```tyhp
 <?tyhpdef
@@ -41,15 +45,15 @@ enum HttpMethod: string {
 // Int-backed enum — values optional
 enum LogLevel: int {
     case Debug = 0;
-    case Info;       // No value: matches any int
-    case Warning;    // No value: matches any int
-    case Error = 3;  // Exact match to 3
+    case Info;
+    case Warning;
+    case Error = 3;
     case Critical;
 }
 ```
 
 :::note
-When a backed enum case omits its value, Tyhp treats it as matching any value of the backing type. When a value is specified, Tyhp can perform exact-value type narrowing. Specifying values is recommended when you know them.
+Omitted backed-case values are allowed in the grammar. This alpha only checks values you write; it does not infer “any int” / “any string” from a missing `=`.
 :::
 
 ## Enums with Methods
@@ -72,7 +76,7 @@ enum Color: string {
 
 ## Enums with Interface Implementation
 
-Enums can implement interfaces. The implements clause follows the backing type (if any), and the interface methods are declared within the enum body.
+Enums can implement interfaces. The implements clause follows the backing type (if any), and the interface methods are declared within the enum body. `\UnitEnum` and `\BackedEnum` are already implied; harvested stubs may keep those clauses. List other interfaces (for example `\Stringable`) as usual.
 
 ```tyhp
 <?tyhpdef
@@ -106,6 +110,10 @@ enum Suit: string {
 }
 ```
 
+## Partial enums
+
+`partial` on a tyhpdef enum follows the same rules as on classes. Include brace `partial enum Foo { … }` adds members. Overlay `partial enum Foo: string implements \Stringable;` replaces written header clauses and keeps unlisted members (overlay-only, `TYHP8034`). See [Tyhpdef Overlays](tyhpdef_overlays.md) and [Classes in Tyhpdef](tyhpdef_classes.md#partial-types-base--include).
+
 ## Enum Aliasing
 
 The same PHP enum can be imported multiple times with different aliases. This is useful when you need to import an enum under a different name or re-import it with different backing type information.
@@ -130,23 +138,23 @@ enum BadgeType as BackedBadgeType: string {
 
 ## Deprecated and Obsolete
 
-Both the enum itself and individual cases or methods can be marked as `deprecated` or `obsolete`.
+The enum itself can be marked `deprecated` or `obsolete` (top-level). Markers on cases and methods parse but are not enforced in this alpha.
 
 ```tyhp
 <?tyhpdef
 
-enum Priority: int {
+deprecated enum LegacyPriority: int {
     case Low = 0;
     case Medium = 1;
     case High = 2;
-    deprecated case Urgent = 3;
+    case Urgent = 3;
 }
 ```
 
 ## Best Practices
 
 :::tip
-DO specify case values for backed enums when you know them. Explicit values enable exact-value type narrowing and catch value mismatches at compile time.
+DO specify case values for backed enums when you know them. Present values are checked; omitted values are not a wildcard.
 :::
 
 :::tip
@@ -159,4 +167,8 @@ DON'T include method bodies on enum methods. All methods end with a semicolon �
 
 :::danger
 DON'T declare a backing type that doesn't match the actual PHP enum. If the PHP enum is string-backed, the Tyhpdef declaration must also be string-backed.
+:::
+
+:::danger
+DON'T redeclare `cases`, `from`, or `tryFrom` on an enum. Harvested stubs may keep `implements \UnitEnum` / `\BackedEnum`; you do not need to write those clauses for the enum to be those types.
 :::

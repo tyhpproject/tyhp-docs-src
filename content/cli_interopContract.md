@@ -14,7 +14,7 @@ The Tyhp ↔ PHP interop contract is the written ABI between the Tyhp compiler (
 
 ## Why this contract exists
 
-Without an explicit contract, the coupling is implicit: emitter transformers call `\Tyhp\…` by exact FQN and signature, and the runtime must match. When either side changes silently, builds break late. Story 15 writes the contract down, stamps a version on both sides, and keeps a machine-checkable surface so drift is caught early.
+Without an explicit contract, the coupling is implicit: emitter transformers call `\Tyhp\…` by exact FQN and signature, and the runtime must match. When either side changes silently, builds break late. This page writes the contract down, stamps a version on both sides, and keeps a machine-checkable surface so drift is caught early.
 
 ## Contract version
 
@@ -134,12 +134,15 @@ Tyhp features that exist for type-checking often leave no (or a reduced) PHP foo
 
 | Feature | At runtime | See |
 |---------|------------|-----|
-| **Generics** | Type parameters erased from signatures; tracked objects keep a `GenericObject` bag (`$__tyhpGeneric`) when the emitter needs runtime checks | [Generics](tyhp_0500_generics.md) |
-| **Type aliases** | Fully erased; usages spell the underlying type | [Type Aliases](tyhp_0700_typeAliases.md) |
-| **Type guards / narrowing** | Compile-time only; `is` / guard checks lower to ordinary PHP boolean tests (`instanceof`, `is_*`, etc.) | [Type Narrowing and Guards](tyhp_0200_typeNarrowingAndGuards.md) |
+| **Generics** | Type parameters erased from signatures. Tracked objects keep a `GenericObject` bag when needed. Foreign compiled-library sites use `\Tyhp\Generic::bind`. `#[\Tyhp\GenericRuntime]` is runtime-visible on emitted generics. `#[\Tyhp\EraseGeneric]` is compile-only. | [Generics](tyhp_0500_generics.md) |
+| **Type aliases** | Hints expand to the underlying PHP type. Source `.tyhp` aliases exist at runtime as namespace functions or class static methods returning `\Tyhp\Type` (`UserId()`, `Optional(\Tyhp\Type::int())`, `UserService::NameType()`), not as PHP types. Tyhpdef aliases stay type-only (`typeof` inlines the body) unless they stamp `aliasFactory`. | [Type Aliases](tyhp_0700_typeAliases.md) |
+| **Type guards / narrowing** | Compile-time only; `is` / guard checks lower to ordinary PHP boolean tests (`instanceof`, `\is_string($x)` when `#[\Tyhp\NativeTypeTest]` is on that guard, otherwise `\Tyhp\Type::is`). Object-shape aliases always use `\Tyhp\Type::is` with a `Type::objectShape(...)` descriptor (existence-only matching). | [Type Narrowing and Guards](tyhp_0200_typeNarrowingAndGuards.md) |
+| **`#[\Tyhp\NativeTypeTest]`** | Compile-only (`#[\Tyhp\NoEmit]`). Never appears in emitted PHP. Picks which type-guard function or concrete static method is the native `$x is T` lowering. | [Functions in Tyhpdef](tyhpdef_functions.md#native-type-tests-tyhpnativetypetest) |
+| **`#[\Tyhp\EraseGeneric]`** | Compile-only (`#[\Tyhp\NoEmit]`). Opts a property, promoted constructor parameter, or whole class out of Mechanism C property tracking. | [Generics](tyhp_0500_generics.md) |
+| **`#[\Tyhp\GenericRuntime]`** | Runtime-visible stamp on every emitted generic class/method/function (`erased`, `layouts`, optional `factory`/`binder`/`aliasFactory`). Not `NoEmit`. | [Generics](tyhp_0500_generics.md) |
 | **Structs** | Declarations erased; values are associative arrays | [Structs](tyhp_0400_structs.md) |
-| **Callable signature utilities** | Compile-time only; `__CallableReturnType<T>` erases to the callable's return type (or `mixed` while `T` is still unbound); `__CallableParametersStruct<T>` / `__CallableParametersTuple<T>` erase to `array` (struct-as-array). Tuple bags use int keys `0..n-1` (`$_1`, `$_2`, … aliases, same shape family as `CallableArgs*`). `__CallableParametersRest<T>` is the rest-unpack marker for `Rest<T> ...$args` (TypeScript `...args: Parameters<T>`); it erases to `mixed` so PHP does not demand each unpacked argument be an array. Defaulted parameters are optional struct fields at check time; optionality does not survive erasure. ExtStandard `\call_user_func` / `\call_user_func_array` tyhpdefs use these utilities; emit is still the PHP builtins (no new `\Tyhp\*` types, no contract bump) | [New Types](tyhp_0150_newTypes.md) |
-| **`internal`** | Compile-time visibility only; emits as ordinary PHP visibility (typically public) | [internal modifier](tyhp_3100_internalModifier.md) |
+| **Callable signature utilities** | Compile-time only; `__CallableReturnType<T>` erases to the callable's return type (or `mixed` while `T` is still unbound); `__CallableParametersStruct<T>` / `__CallableParametersTuple<T>` erase to `array` (struct-as-array). Tuple bags use int keys `0..n-1` (`$_1`, `$_2`, … aliases, same shape family as `CallableArgs*`). `__CallableParametersRest<T>` is a pack: value-position `Rest<T> ...$args` unpacks at the call; inside a callable-shape parameter list it auto-splices. `__CallableParametersSlice<T, TStart, TMin>` selects a parameter or a tail of parameters. Rest/Slice erase to `mixed` so PHP does not demand each unpacked argument be an array. Defaulted parameters are optional struct fields at check time; optionality does not survive erasure. ExtStandard `\call_user_func` / `\call_user_func_array` / zip `\array_map` tyhpdefs use these utilities; emit is still the PHP builtins (no new `\Tyhp\*` types, no contract bump) | [New Types](tyhp_0150_newTypes.md) |
+| **`internal`** | Stripped; members emit `public`, top-level unprefixed. Omitted from `package.tyhpdef`. | [internal modifier](tyhp_3100_internalModifier.md) |
 
 What **survives** is whatever the emitter explicitly lowers into calls on the runtime surface below (operators, disposables, async, property-hook polyfills, generic bags, `with`, `PropertyPath` / expression trees, and so on).
 
@@ -165,7 +168,7 @@ Even when the emitter does not yet `RequirePackage` a package for every call sit
 
 | FQN | Role |
 |-----|------|
-| `\Tyhp\Type` | Runtime type values / checks (`Type::check`, `Type::is`, …) |
+| `\Tyhp\Type` | Runtime type values / checks (`Type::check`, `Type::is`, `Type::objectShape`, …) |
 | `\Tyhp\NamedType` | Named type arguments in the generic bag |
 | `\Tyhp\GenericObject` | Per-instance generic argument bag |
 | `\Tyhp\PropertyAccessor` | Property-hook polyfill registrations |
@@ -173,6 +176,8 @@ Even when the emitter does not yet `RequirePackage` a package for every call sit
 | `\Tyhp\ObjectHelper` | Object-form `with` / clone-with lowering |
 | `\Tyhp\Contracts\IsDisposable` | Sync disposable protocol |
 | `\Tyhp\Concerns\HasGenerics` | Trait wiring the generic bag |
+| `\Tyhp\Generic` | `Generic::bind` for PHP and foreign compiled-library sites |
+| `\Tyhp\GenericRuntime` | Runtime-visible stamp on emitted generic declarations |
 | `\Tyhp\Concerns\UsesPropertyAccessors` / `HasPropertyAccessors` / `HandlesGet` / `HandlesSet` / `HandlesIsset` / `HandlesUnset` / `BootsTraits` | Property-accessor polyfill concerns |
 | `\Tyhp\Contracts\{Convertible,StringConvertible,BoolConvertible,IntConvertible,FloatConvertible}` | Convert-to interfaces |
 | `\Tyhp\Exceptions\InvalidParametersForOperatorOverloadException` | Operator dispatch miss |
@@ -206,7 +211,7 @@ Contract surface for decimal operators / convert targets and direct use. The emi
 | `\Tyhp\Expression\ExpressionNode` (and `Expression\*` node types) | Tree nodes — **Phase 2 emit** builds these directly |
 | `\Tyhp\PropertyPath` | Property-path expressions — **Phase 1 emit target** |
 
-**Phase 1 emit ABI (Story 16):** when a call argument targets `PropertyPath<T, R>` and the argument is an inline property-chain `fn`, the emitter lowers to:
+**Phase 1 emit ABI:** when a call argument targets `PropertyPath<callable(T): R>` and the argument is an inline property-chain `fn`, the emitter lowers to:
 
 ```php
 new \Tyhp\PropertyPath(
@@ -231,7 +236,7 @@ new \Tyhp\PropertyPath(
 );
 ```
 
-**Phase 2 emit ABI (Story 16):** when a call argument targets `Expression<T, R>` and the argument is an inline arrow `fn`, the emitter lowers to a root `Expression` plus nested node constructors (additive — no contract version bump):
+**Phase 2 emit ABI:** when a call argument targets `Expression<callable(T): R>` and the argument is an inline arrow `fn`, the emitter lowers to a root `Expression` plus nested node constructors (additive — no contract version bump):
 
 ```php
 new \Tyhp\Expression(
@@ -255,7 +260,7 @@ new \Tyhp\Expression(
 
 Supported nested FQNs include `ParameterExpression`, `PropertyAccessExpression`, `NullSafeAccessExpression`, `MethodCallExpression`, `StaticMethodCallExpression`, `BinaryExpression`, `UnaryExpression`, `ConstantExpression`, `TernaryExpression`, `CoalesceExpression`, `ArrayAccessExpression`, `CastExpression`, `NewExpression`, and `InstanceofExpression` (Phase 3 — `$x is T` / `$x instanceof T`). Captured outer variables emit as `ConstantExpression($var, $type)`.
 
-`Expression<TArgs…, TReturn>` follows the callable return-last convention: `Expression<R>` is zero-parameter, `Expression<T, R>` is one-parameter, `Expression<T, T, int>` is a two-parameter comparator. That arity is a checker/type-system convention; the runtime class remains `Expression<TSource, TReturn>` and emit still constructs `new \Tyhp\Expression(...)`. No contract version bump.
+`Expression` takes one type argument: the callable shape (`Expression<callable(User): string>`; `Expression<callable(): R>` for zero parameters). That shape is a checker/type-system convention; emit still constructs `new \Tyhp\Expression(...)`. No contract version bump.
 
 `nameof(fn ($x) => $x->a->b)` is a compile-time fold to the last property segment (a string literal). It does not emit `PropertyPath` / `Expression` construction.
 
@@ -273,26 +278,26 @@ Brief map from Tyhp construct → PHP runtime pattern. Goldens live under the co
 |-----------|-----------------|----------------|
 | Disposables `:=` | `\Tyhp\DisposableScope::create()` + `using` / try-finally fallback | `tests/conformance/story11/disposables/`; [Disposables](tyhp_2300_disposables.md) |
 | Async / await | `\Tyhp\Promise::_async` / `_await` / `run`; return type `\Tyhp\Promise` | `tests/conformance/story11/async/`; [Async and Await](tyhp_2600_asyncAndAwait.md) |
-| `with` / clone-with | `\Tyhp\ObjectHelper::with(…)` (or native PHP 8.5 `clone(…)` when targeted) | `tests/conformance/story11/with/`; Story 14.5 clone suites; [with keyword](tyhp_2200_withKeyword.md) |
+| `with` / clone-with | `\Tyhp\ObjectHelper::with(…)` (or native PHP 8.5 `clone(…)` when targeted) | `tests/conformance/story11/with/`; [with keyword](tyhp_2200_withKeyword.md) |
 | Operators | Static/`__to*` calls via `__add`, … | `tests/conformance/story11/operator-overloads/`; [Operator Overloads](tyhp_1600_operatorOverloads.md) |
 | Generics | Erasure + optional `GenericObject` bag / `__initGenerics__tyhpGeneric` / factories | `tests/conformance/story11/generics/`; [Generics](tyhp_0500_generics.md) |
-| Property hooks (PHP &lt; 8.4) | Strip native hooks; `UsesPropertyAccessors` + `PropertyAccessor` registration; `__get_/__set_*__tyhpPropertyHook` | Story 14.5 hook suites (native ≥ 8.4/8.5); polyfill paths in emitter |
-| Expression trees / PropertyPath | Phase 1: `new \Tyhp\PropertyPath(…)` (plus `nullSafeFlags:` for `?->` chains); Phase 2: `new \Tyhp\Expression(…)` + nested `\Tyhp\Expression\*` nodes; Phase 3: `InstanceofExpression` for `is`/`instanceof`, multi-parameter `Expression<TArgs…, TReturn>` arity (still `new \Tyhp\Expression`); `\Closure` sites → `$path->callable` | `tests/Tyhp.Tests/Emitter/PropertyPathEmitterTests.cs`, `ExpressionEmitterTests.cs`; [Parsable Lambdas](tyhp_3000_parsableLambdas.md) |
+| Property hooks (PHP &lt; 8.4) | Strip native hooks; `UsesPropertyAccessors` + `PropertyAccessor` registration; `__get_/__set_*__tyhpPropertyHook` | hook suites (native ≥ 8.4/8.5); polyfill paths in emitter |
+| Expression trees / PropertyPath | Phase 1: `new \Tyhp\PropertyPath(…)` (plus `nullSafeFlags:` for `?->` chains); Phase 2: `new \Tyhp\Expression(…)` + nested `\Tyhp\Expression\*` nodes; Phase 3: `InstanceofExpression` for `is`/`instanceof`, multi-parameter `Expression<callable(TArgs ...): TReturn>` arity (still `new \Tyhp\Expression`); `\Closure` sites → `$path->callable` | `tests/Tyhp.Tests/Emitter/PropertyPathEmitterTests.cs`, `ExpressionEmitterTests.cs`; [Parsable Lambdas](tyhp_3000_parsableLambdas.md) |
 | PHP 8.5 surface / lower targets | Pipe, `(void)`, `clone(…)`, exit/die, attributes | `tests/conformance/story14_5/` |
 
-Story 15 owns a thin index suite under `tests/conformance/story15/` (operators, extensions, generics erasure, structs, disposables, async, expression trees). Fuller emit coverage remains in story11 / story14_5 — see the conformance README.
+A thin index suite lives under `tests/conformance/story15/` (operators, extensions, generics erasure, structs, disposables, async, expression trees). Fuller emit coverage remains in `tests/conformance/story11/` and `tests/conformance/story14_5/` — see the conformance README.
 
 ## Compatibility policy
 
 - **Additive** changes (new optional runtime helpers the emitter does not yet call, new convertible targets that do not rename existing methods) may ship without bumping `interopContractVersion`. A minor bump is optional documentation hygiene.
 - **Breaking** changes — any rename or signature change of an emitted call, synthetic method, or required FQN — require bumping `interopContractVersion` on the compiler (`InteropContract.CurrentVersion`) **and** on every affected runtime package’s `extra.tyhp.interopContractVersion`.
-- **PHP matrix** — which PHP minor a release supports is coordinated with Story 21 and the PHP-encoded compiler **MAJOR** in `VERSIONING.md`. Contract bumps and MAJOR bumps are independent axes; both may move in the same release when an ABI and a PHP target change together.
+- **PHP matrix** — which PHP minor a release supports is coordinated with the `tyhpdef/php` / `tyhpdef/php-ext-*` packages and the PHP-encoded compiler **MAJOR** in `VERSIONING.md`. Contract bumps and MAJOR bumps are independent axes; both may move in the same release when an ABI and a PHP target change together.
 
 ## Machine-checkable surface
 
 `InteropContractSurface` enumerates emitter-required runtime symbols (the contract surface). Conformance tests assert that each symbol is declared — with the documented namespace and keyword — in the owning package’s committed `package.tyhpdef`. The tyhpdef is the checked source of truth because emitted `src/` PHP is regenerated (and `dist/` is not committed).
 
-Runtime **self-host** (Story 07: recompile `runtime/packages/*/tyhp_src` and diff against committed PHP) consumes this list once the Story 07 allowlist is green. Until then, Story 15 treats self-host as gated — the surface list is ready for that milestone; it does not block documenting or version-stamping the contract.
+Runtime **self-host** (recompile `runtime/packages/*/tyhp_src` and diff against committed PHP) consumes this list once the self-host allowlist is green. Documenting or version-stamping the contract does not wait on that milestone.
 
 :::tip
 When changing emit call patterns, update `OperatorMethodNameGenerator` / `GeneratedNames`, the runtime packages, `InteropContractSurface`, this page, and bump `interopContractVersion` if the change is breaking — in that order of truth: **code helpers → runtime → surface enum → docs → version stamp**.

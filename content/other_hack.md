@@ -2,7 +2,7 @@
 title: 'Hack / HHVM'
 ---
 
-Hack is a statically typed programming language developed by Facebook (now Meta) that originally evolved from PHP. It runs on the HipHop Virtual Machine (HHVM), a custom runtime built by Facebook as a high-performance replacement for the standard PHP interpreter. Hack and Tyhp share a common goal — bringing strong typing to PHP-like code — but they take fundamentally different approaches to achieving it.
+Hack is a statically typed programming language developed by Facebook (now Meta) that originally evolved from PHP. It runs on the HipHop Virtual Machine (HHVM), a custom runtime built by Facebook as a high-performance replacement for the standard PHP interpreter. Hack and Tyhp both add static typing to PHP-like syntax, but they take fundamentally different approaches.
 
 ## What Hack Is
 
@@ -25,7 +25,7 @@ The most significant difference is the runtime. Hack requires HHVM, a separate v
 
 ## PHP Compatibility
 
-Hack has diverged substantially from PHP over the years. HHVM dropped support for running plain PHP code in 2018 (version 3.30), and Hack has since introduced syntax and semantics that are incompatible with PHP. Tyhp, by contrast, is designed as a strict superset of PHP. Valid PHP is valid Tyhp (with the addition of required types), and compiled Tyhp output is standard PHP that any PHP developer can read and understand.
+Hack has diverged substantially from PHP over the years. HHVM dropped support for running plain PHP code in 2018 (version 3.30), and Hack has since introduced syntax and semantics that are incompatible with PHP. Tyhp is a typed superset of the PHP language: it compiles to standard PHP that runs on a PHP runtime. `.php` files in a Tyhp project are passed through; `<?tyhp` source requires types and restricts some PHP features (see Lost and Changed Functionality).
 
 ## Ecosystem Integration
 
@@ -33,8 +33,8 @@ Because Tyhp outputs standard PHP, it integrates seamlessly with the PHP ecosyst
 
 ## Scope and Philosophy
 
-Hack has a large engineering team at Meta and introduces many new operators, control structures, and language constructs beyond what PHP offers. Tyhp takes a more conservative approach: it builds on top of PHP's existing syntax and adds new features only when they provide clear value, without changing or removing any existing PHP syntax. Tyhp's philosophy is to enhance PHP, not replace it.
+Hack has a large engineering team at Meta and introduces many new operators, control structures, and language constructs beyond what PHP offers. Tyhp is more conservative: it starts from PHP syntax and adds constructs where they are worth the extra surface. Some PHP features are restricted in `<?tyhp` (for example `eval()` is off by default, and undeclared properties are allowed only on `\stdClass`) so the compiler can type-check; see Lost and Changed Functionality. Tyhp does not replace the PHP runtime.
 
 ## When to Choose Hack
 
-Hack has many strengths. Its type system is mature and battle-tested at Facebook's scale. If you are willing to adopt HHVM as your runtime and your project does not depend heavily on the standard PHP ecosystem, Hack offers a powerful and well-supported language. Tyhp does not claim to be better than Hack — it is a different solution with different trade-offs, designed for teams that want to stay within the standard PHP ecosystem while gaining strong typing and modern language features.
+Hack has many strengths. Its type system is mature and battle-tested at Facebook's scale. If you are willing to adopt HHVM as your runtime and your project does not depend heavily on the standard PHP ecosystem, Hack offers a powerful and well-supported language. Tyhp is a different solution: a typed superset that compiles to PHP so you can stay on a PHP runtime and the PHP ecosystem.

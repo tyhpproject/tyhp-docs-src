@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace Tyhp\Docs;
 
 use League\CommonMark\Environment\Environment;
+use League\CommonMark\Event\DocumentParsedEvent;
 use League\CommonMark\Extension\CommonMark\CommonMarkCoreExtension;
 use League\CommonMark\Extension\CommonMark\Node\Block\FencedCode;
+use League\CommonMark\Extension\Table\Table;
+use League\CommonMark\Extension\Table\TableExtension;
 use League\CommonMark\MarkdownConverter;
+use League\CommonMark\Node\NodeIterator;
 use League\CommonMark\Util\HtmlFilter;
 
 /**
@@ -30,10 +34,25 @@ final class MarkdownRenderer
             'renderer' => [
                 'soft_break' => "<br />\n",
             ],
+            'table' => [
+                'wrap' => [
+                    'enabled' => true,
+                    'tag' => 'div',
+                    'attributes' => ['class' => 'table-responsive'],
+                ],
+            ],
         ];
 
         $environment = new Environment($config);
         $environment->addExtension(new CommonMarkCoreExtension());
+        $environment->addExtension(new TableExtension());
+        $environment->addEventListener(DocumentParsedEvent::class, static function (DocumentParsedEvent $event): void {
+            foreach ($event->getDocument()->iterator(NodeIterator::FLAG_BLOCKS_ONLY) as $node) {
+                if ($node instanceof Table) {
+                    $node->data->append('attributes/class', 'table table-striped table-bordered');
+                }
+            }
+        });
         $environment->addRenderer(
             FencedCode::class,
             new FencedCodeRenderer($this->templates, $this->statusBadgeRenderer, $this->signatureFormatters)

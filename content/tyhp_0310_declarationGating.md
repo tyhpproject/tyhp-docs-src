@@ -9,7 +9,7 @@ status:
 PHP developers often wrap declarations in existence checks so a file can be loaded more than once without fatal redeclaration errors — for example `if (!\function_exists(...)) { function ... }` or `if (!\class_exists(...)) { class ... }`. Tyhp supports the same pattern. What Tyhp adds is compile-time validation: when you use that idiom to gate a declaration, the gate argument must name that exact declaration, using a fully-qualified name.
 
 :::note
-This page is about **declaration gates** — wrapping a class, function, interface, trait, or enum so it is only declared when it does not already exist. That is separate from using `\class_exists($name)` / `\function_exists($name)` as **type guards** on string variables (see Type Narrowing and Guards).
+This page is about **declaration gates** in Tyhp source — wrapping a class, function, interface, trait, or enum so it is only declared when it does not already exist. That is separate from using `\class_exists($name)` / `\function_exists($name)` as **type guards** on string variables (see Type Narrowing and Guards), and separate from **PHP version gates** (`declare(php=…)` / `#[\Tyhp\Php]`) and **extension gates** (`declare(ext="…")`) that keep or drop declarations while binding (see [PHP Version Gating](tyhp_0320_phpVersionGating.md)). Package signatures for the same PHP pattern use `fallback function` and `fallback const` in `.tyhpdef` (see [Fallback functions](tyhpdef_functions.md#fallback-functions)).
 :::
 
 ## The Pattern
@@ -29,7 +29,7 @@ if (!\function_exists('\App\Payments\formatMoney')) {
 
 if (!\class_exists('\App\Payments\Money')) {
     class Money {
-        public function __construct(public readonly int $cents) {}
+        public function __construct(public readonly int $cents): void {}
     }
 }
 ```
@@ -107,6 +107,53 @@ if (!\function_exists(__NAMESPACE__ . '\formatMoney')) {
 :::tip
 This is why declaration gates are useful for shared helpers that may be loaded from more than one path: Tyhp still emits them as normal declarations, wrapped in the same existence check you wrote — rewritten to `__NAMESPACE__` so it tracks the emitted namespace.
 :::
+
+## Fallback Declarations
+
+`fallback` in front of a `function`, `class`, `interface`, `trait`, `enum`, or `const` declaration is shorthand for the matching existence gate. The declaration is only declared when nothing has declared that name already:
+
+```tyhp
+<?tyhp
+
+namespace App\Payments;
+
+fallback function formatMoney(int $cents): string {
+    return '$' . \number_format($cents / 100, 2);
+}
+```
+
+This emits the same code as the hand-written gate above:
+
+```php
+namespace App\Payments;
+
+if (!\function_exists(__NAMESPACE__ . '\formatMoney')) {
+    function formatMoney(int $cents): string
+    {
+        return '$' . \number_format($cents / 100, 2);
+    }
+}
+```
+
+`fallback` combines with `deprecated`, `obsolete`, and `async`. It does not combine with `partial`, `omit`, or `extern`. Because `fallback` is contextual, a function named `fallback` still works.
+
+A `fallback const` uses `\defined` and `\define`, because PHP has no conditional `const`:
+
+```tyhp
+<?tyhp
+
+fallback const int LIMIT = 13;
+```
+
+```php
+if (!\defined('LIMIT')) {
+    \define('LIMIT', 13);
+}
+```
+
+In a namespace the name is written as `__NAMESPACE__ . '\LIMIT'`; in the global namespace it has no leading backslash, because `\define('\LIMIT', …)` would register a constant that plain `LIMIT` cannot find.
+
+A `fallback` declaration can sit inside `declare(php=…)` and `declare(ext=…)` blocks. The version and extension checks wrap the existence check. See [PHP Version Gating](tyhp_0320_phpVersionGating.md#extension-presence).
 
 ## When the Gate Is Incorrect
 

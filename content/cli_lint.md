@@ -8,6 +8,8 @@ status:
 
 The lint action checks your Tyhp project for errors and warnings without generating any output files. It runs the compilation pipeline through parse, bind, and check — but skips the emitter and file writing. This makes it faster than a full build and ideal for development feedback and CI/CD integration.
 
+Before parse, lint applies the same local `extra.tyhp.require` check as `tyhp build` (explain missing extras; do **not** write `composer.json`). Use `tyhp composer sync` or `tyhp build --fix` to recover. `tyhp lint --fix` is the experimental source auto-fixer, not extras sync. See [CLI: Composer](cli_composer.md).
+
 ## Usage
 
 ```
@@ -22,6 +24,10 @@ tyhp lint [options] [files...]
 - --fix — Apply auto-fixable changes to source files (experimental).
 - --max-fix-iterations=<n> — Maximum auto-fix re-run iterations (default: 10; also checker.maxFixIterations).
 - --quiet — Suppress the banner and non-diagnostic output.
+- --strict — Treat warnings as errors.
+- --suppress-warnings=<TYHP####,…> — Hide the listed warning codes for this run (replaces `suppressWarnings` in `tyhp.json`). Errors are never hidden.
+- --cache-dir=<path> — Override the AST cache directory.
+- --no-cache — Disable the on-disk parse cache for this run.
 - --include=<glob> — Include additional source paths.
 - --exclude=<glob> — Exclude source paths.
 
@@ -161,6 +167,21 @@ The --fix flag is experimental. Always review the changes it makes. Source files
 - 1 (GenericError) — Lint was cancelled (e.g., Ctrl+C).
 - 4 (CompileError) — One or more errors found.
 - 5 (CompileWarning) — Warnings found but no errors.
+
+## PHP version matrix (8.2–8.5)
+
+`output.phpVersion` selects which version-gated declarations from `tyhpdef/php` and `tyhpdef/php-ext-*` are visible. Lint or build the same project four times (or change the key between runs) to confirm a gated API:
+
+| `output.phpVersion` | Example APIs that become visible |
+|---------------------|----------------------------------|
+| `"8.2"` | Always-present surface only (no `json_validate`, no `array_find`) |
+| `"8.3"` | `json_validate()` |
+| `"8.4"` | `array_find()` / `array_find_key()` / `array_any()` / `array_all()` |
+| `"8.5"` | `array_first()` / `array_last()` |
+
+You do not install four PHP runtimes for this check. Gates are compile-time against the configured target. See [PHP Version Gating](tyhp_0320_phpVersionGating.md). Engine attribute **classes** follow that matrix; some **checks** (`#[\Deprecated]`, `#[\NoDiscard]`) still run on lower targets — see [PHP Engine Attributes](tyhp_0330_phpEngineAttributes.md).
+
+`--strict` treats overlay stamp-mismatch warnings (`TYHP8021`) as errors.
 
 ## CI/CD Integration
 

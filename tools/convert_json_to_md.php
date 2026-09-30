@@ -2,7 +2,7 @@
 <?php
 
 /**
- * One-shot converter: docs/content/*.json page files → Markdown + YAML front matter.
+ * One-shot converter: content/*.json page files → Markdown + YAML front matter.
  *
  * Usage: php tools/convert_json_to_md.php
  */

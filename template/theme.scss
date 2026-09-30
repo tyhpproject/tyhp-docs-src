@@ -119,6 +119,24 @@ nav a[href^="#"]:where(:has(~ * :target)) {
 /*************************** Theme Styles Section ****************************/
 @import "../CoderDocs-BS5-v3.0/assets/scss/theme/styles.scss";
 
+/*************************** Markdown tables ****************************/
+.docs-article .table-responsive {
+    margin-bottom: 1.5rem;
+}
+
+.docs-article .table-responsive > .table {
+    margin-bottom: 0;
+}
+
+.docs-article table.table {
+    width: 100%;
+}
+
+.docs-article table.table th,
+.docs-article table.table td {
+    vertical-align: top;
+}
+
 @include color-mode(dark) {
     $theme-text-color-light: #252930;
     $theme-text-color-primary: lighten($theme-text-color-light, 80%);

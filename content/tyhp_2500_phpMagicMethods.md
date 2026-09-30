@@ -13,7 +13,7 @@ Tyhp supports all of PHP's magic methods with additional type safety requirement
 All standard PHP magic methods are supported in Tyhp. They must follow PHP's expected signatures but can use Tyhp's enhanced type system. The following table lists every supported magic method and its Tyhp-specific behavior.
 
 :::member[__construct()]
-Constructor. Supports Tyhp constructor property promotion with modifiers like init. The return type can optionally be : void or : parent(args) for explicit parent constructor invocation.
+Constructor. Supports Tyhp constructor property promotion with modifiers like `readonly`. The return type is optional: `: void` (or omit it) when the constructor does not chain, or `: parent(args)` for explicit parent constructor invocation. Omitting the return type is equivalent to `: void` — no `parent::__construct(...)` call is inserted.
 :::
 
 :::member[__destruct()]
@@ -21,11 +21,11 @@ Destructor. Called when an object is garbage collected. Used internally by Dispo
 :::
 
 :::member[__get(string $name): mixed]
-Called when reading an inaccessible or non-existent property. Returns mixed — must be narrowed before use in a type-safe context.
+Called when reading an inaccessible or non-existent property. Returns mixed — must be narrowed before use in a type-safe context. Without `__get`, an undeclared read is unresolved (including on `\stdClass`).
 :::
 
 :::member[__set(string $name, mixed $value): void]
-Called when writing to an inaccessible or non-existent property. Type-safe wrapper methods are encouraged instead of direct __set usage.
+Called when writing to an inaccessible or non-existent property. Without `__set`, undeclared writes are TYHP4134 except on exact `\stdClass`. Type-safe wrapper methods are encouraged instead of direct __set usage.
 :::
 
 :::member[__isset(string $name): bool]
@@ -45,15 +45,15 @@ Called when invoking inaccessible or non-existent static methods. Returns mixed.
 :::
 
 :::member[__toString(): string]
-Called when an object is used in a string context. Must return string — the compiler enforces this return type strictly.
+Called when an object is used in a string context. Must return string — the compiler enforces this return type strictly. Declaring `__toString` makes the type `\Stringable` (PHP auto-implement); you do not need to write `implements \Stringable`.
 :::
 
 :::member[__invoke(...$args): mixed]
-Called when an object is used as a function ($obj()). Return type is mixed — must be narrowed before use.
+Called when an object is used as a function ($obj()). Return type is mixed — must be narrowed before use. `\Closure` is callable through `__invoke`; its generic shape is `\Closure<TCallableShape, TThis, TScope>` — see [New and Changed Types](tyhp_0150_newTypes.md#the-closuretcallableshape-tthis-tscope-type).
 :::
 
 :::member[__clone(): void]
-Called after an object is cloned with clone. The compiler auto-generates __clone() for classes with init properties to support the with keyword.
+Called after an object is cloned with clone. You may implement it yourself. For PHP &lt; 8.5, the compiler may emit a clone wrapper when `with` updates `readonly` properties.
 :::
 
 :::member[__debugInfo(): array]
@@ -140,9 +140,12 @@ class ApiClient {
     }
 }
 
-// Extension method — compile-time type safety
-extension ApiClientExtensions extends ApiClient {
-    public static function getUsers(extends ApiClient $client): array<User> {
+// Extension method — compile-time type safety.
+// Members are top-level `function` forms (optional `async` only).
+// Visibility/`static` cannot appear. Extensions cannot `extends`; the receiver type
+// comes from `extends ApiClient $client` on the parameter itself.
+extension ApiClientExtensions {
+    function getUsers(extends ApiClient $client): array<User> {
         mixed $result = $client->sendRequest('getUsers', []);
         // narrowing and type-safe return
         return $result is array ? $result : [];
@@ -168,9 +171,36 @@ $users = ApiClientExtensions::getUsers($api);
 $result = $api->unknownMethod();
 ```
 
+## Property Hooks (PHP 8.4)
+
+Tyhp supports PHP 8.4 property hooks (`get` / `set`) on class properties. Hook bodies match PHP: a parameter-less `get { ... }`, optional `set { ... }` (the incoming value is `$value`), or a typed `set(string $value) { ... }`. `&get` and `final get` / `final set` are also valid.
+
+When `output.phpVersion` is **8.4 or later**, the compiler emits native hook syntax. When the target is **below 8.4**, it polyfills the same source through `\Tyhp\Concerns\UsesPropertyAccessors` and `$this->__tyhpPropertyHook`. `&get` requires PHP 8.4.
+
+```tyhp
+<?tyhp
+
+final class Widget {
+    private string $_name = '';
+
+    public string $name {
+        get {
+            return $this->_name;
+        }
+        set(string $value) {
+            $this->_name = $value;
+        }
+    }
+}
+```
+
+See [Object Declaration Changes](tyhp_1300_newObjectDeclSyntax.md#property-accessors-php-84-hooks) for tyhpdef `{ get; set; }` form.
+
 ## Auto-Generated Magic Methods for Generics
 
-When a class uses generics with runtime type tracking, the Tyhp compiler adds the GenericObject trait from the tyhp/core package. This trait provides runtime generic type parameter storage and retrieval. The compiler also auto-generates constructor logic to initialize the generic type information.
+When a class uses generics with runtime type tracking, the Tyhp compiler adds the `HasGenerics` trait from the tyhp/core package (`\Tyhp\Concerns\HasGenerics`). `Concerns\GenericObject` is the legacy name. The compiler also auto-generates constructor logic to initialize the generic type information (`__initGenerics__tyhpGeneric` and `$this->__tyhpGeneric->init(...)`).
+
+Tracking is on when the class uses `typeof(T)` / `default(T)` / `is T` / `new T()` / forwarded type arguments, or when it has a generic-typed instance property (including promoted constructor properties) that is not opted out with `#[\Tyhp\EraseGeneric]`. Mixed mode is allowed: the class stays tracked while opted-out properties skip set checks. Fully erased generic classes emit **no** trait. The attribute is not inherited.
 
 ```tyhp
 <?tyhp
@@ -185,15 +215,18 @@ class TypedCollection<T> {
     public function get(int $index): T {
         return $this->items[$index];
     }
+
+    public function getItemType(): \Tyhp\Type {
+        return typeof(T);
+    }
 }
 ```
 
 ```php
 <?php
 
-// The compiler adds the GenericObject trait and type tracking
 class TypedCollection {
-    use \Tyhp\Concerns\GenericObject;
+    use \Tyhp\Concerns\HasGenerics;
 
     private array $items = [];
 
@@ -204,11 +237,13 @@ class TypedCollection {
     public function get(int $index): mixed {
         return $this->items[$index];
     }
-}
 
-// When instantiated with concrete types:
-$collection = new TypedCollection();
-$collection->__setGenericTypes([\Tyhp\Type::of('int')]);
+    protected function __initGenerics__tyhpGeneric(?\Tyhp\Type ...$generics): void
+    {
+        $this->__tyhpGeneric->init(static::class, \TypedCollection::class, new \Tyhp\NamedType('T', $generics[0] ?? null));
+        $this->__tyhpGeneric->markBound();
+    }
+}
 ```
 
 ## __toString Must Return string
@@ -222,13 +257,40 @@ class Money {
     public function __construct(
         private int $amount,
         private string $currency
-    ) {}
+    ): void {}
 
     // OK: returns string
     public function __toString(): string {
         return "{$this->amount} {$this->currency}";
     }
 }
+```
+
+A class or interface that declares `__toString(): string` is a `\Stringable` type. Echo, concatenation, interpolation, and assignability to `\Stringable` follow that rule. Written `implements \Stringable` is still allowed.
+
+```tyhp
+<?tyhp
+
+class Money {
+    public function __construct(
+        private int $amount,
+        private string $currency
+    ): void {}
+
+    public function __toString(): string {
+        return "{$this->amount} {$this->currency}";
+    }
+}
+
+function label(\Stringable $value): void {}
+
+Money $pay = new Money(10, "USD");
+label($pay);
+echo $pay;
+```
+
+```tyhp
+<?tyhp
 
 // ERROR: __toString must return string
 // class Bad {
@@ -238,13 +300,13 @@ class Money {
 
 ## Constructor Return Type Syntax
 
-Tyhp extends constructor syntax with optional return type annotations. The return type can be : void (documentation purposes) or : parent(args) to indicate that the parent constructor is called with specific arguments.
+Tyhp constructors may declare a return type: `: void` (or omit it) when the constructor does not chain, or `: parent(args)` to insert `parent::__construct(...)` at the start of the body. Omitting the return type is equivalent to `: void`. PHP output strips the annotation.
 
 ```tyhp
 <?tyhp
 
 class Base {
-    public function __construct(public string $name) {}
+    public function __construct(public string $name): void {}
 }
 
 class Child extends Base {
@@ -276,16 +338,16 @@ class Child extends Base {
 
 ## __clone and the with Keyword
 
-The compiler auto-generates __clone() for classes with init properties to support immutable cloning via the with keyword. You do not need to write __clone() manually for init-property classes — the compiler handles it.
+`clone ... with` on `readonly` properties does not require you to write `__clone()`. On PHP 8.5+ the compiler emits native `clone($obj, [...])`. On PHP 8.2–8.4 it uses a compiler-generated wrapper (opt-in via `build.experimentalReadonlyCloneWith`). You can still write your own `__clone()` for other clone-time work.
 
 ```tyhp
 <?tyhp
 
 class Point {
     public function __construct(
-        public init int $x,
-        public init int $y
-    ) {}
+        public readonly int $x,
+        public readonly int $y
+    ): void {}
 }
 
 Point $p1 = new Point(1, 2);
@@ -307,13 +369,13 @@ Use operator overloads instead of relying on __toString() for arithmetic or comp
 :::
 
 :::tip
-Let the compiler auto-generate __clone() for classes with init properties. The auto-generated __clone() correctly handles the with keyword for immutable value objects.
+Use `readonly` properties with `clone ... with` for immutable value objects. You do not need a handwritten `__clone()` for that pattern.
 :::
 
 ## Common Mistakes
 
 :::danger
-Relying on __get() and __set() for dynamic property creation. Tyhp disables dynamic property creation on classes — all properties must be declared in the class definition. Use __get/__set only for controlled access to a backing store like an array.
+Using __get/__set as a substitute for declared properties on ordinary classes. Undeclared writes are legal only on exact `\stdClass`. Other types — including `class Bag extends \stdClass` — must declare properties or implement `__set` (TYHP4134). Use __get/__set when you need a controlled backing store.
 :::
 
 :::danger
@@ -329,12 +391,12 @@ Returning a non-string value from __toString(). The compiler enforces that __toS
 :::
 
 :::danger
-Manually writing __clone() logic for init property handling. Let the compiler generate it automatically — manual __clone() implementations may conflict with the with keyword behavior.
+Assuming `clone ... with` on `readonly` works on PHP 8.2–8.4 without `build.experimentalReadonlyCloneWith: true`. Enable that flag, or target PHP 8.5+.
 :::
 
 ## Compiled PHP Output
 
-Magic methods compile to standard PHP magic methods. The compiler does not transform the magic method signatures or bodies — they pass through to PHP directly. The only additions are auto-generated magic methods for generic classes (GenericObject trait) and auto-generated __clone() for init-property classes.
+Magic methods compile to standard PHP magic methods. The compiler does not transform the magic method signatures or bodies — they pass through to PHP directly. The only additions are auto-generated generic-tracking members when needed (`HasGenerics` trait, `__initGenerics__tyhpGeneric`). Property hooks on `output.phpVersion` below 8.4 emit the `UsesPropertyAccessors` polyfill rather than native PHP 8.4 hook syntax. Readonly `clone ... with` on PHP &lt; 8.5 may emit a separate wrapper, not a replacement of your own `__clone()`.
 
 ```tyhp
 <?tyhp

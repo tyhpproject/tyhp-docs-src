@@ -6,8 +6,8 @@ status:
   state: planned
 ---
 
-:::warning Not in this alpha
-This feature is **not included** in Tyhp 805.0.0-alpha.1 (roadmap Tier 2/3). The rest of this page describes the planned design. Do not expect these commands or syntax to work yet.
+:::warning Not in this beta
+This feature is **not included** in Tyhp 805.1.0-beta.1 (roadmap Tier 2/3). The rest of this page describes the planned design. Do not expect these commands or syntax to work yet.
 :::
 
 
@@ -292,10 +292,10 @@ Null-conditional assignment works with Tyhp structs. Since structs are backed by
 ```tyhp
 <?tyhp
 
-struct Point {
+type Point = struct {
     int $x;
     int $y;
-}
+};
 
 ?Point $p = getPoint();
 $p?->x = 10;

@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+
+# Generated HTML. output.zip is the committed build archive.
+output/
+
+# Matches the compiler ignore for bin/. Keeps Composer bin shims (vendor/bin and
+# package Resources/bin) out of the committed vendor tree.
+bin/
+
+node_modules/
+
+# Local-only
+.cursor/

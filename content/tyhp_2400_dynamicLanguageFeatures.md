@@ -6,18 +6,18 @@ status:
   state: complete
 ---
 
-Tyhp restricts PHP's dynamic language features to improve type safety and enable static analysis. Features like variable variables, variable functions, dynamic property access, dynamic method calls, and dynamic class instantiation are not disabled — but they require type narrowing through special string value types or type guard functions before use. This ensures the compiler can verify that the referenced symbols actually exist, preventing runtime errors from invalid references.
+Tyhp restricts PHP's dynamic language features to improve type safety and enable static analysis. Variable variables (`$$var`) are prohibited (TYHP4133). Variable functions, dynamic property access, dynamic method calls, and dynamic class instantiation are not disabled — but they require type narrowing through special string value types or type guard functions before use. This ensures the compiler can verify that the referenced symbols actually exist, preventing runtime errors from invalid references.
 
 ## Why Dynamic Features Are Restricted
 
-In PHP, dynamic features like variable variables and dynamic method calls accept any string at runtime with no compile-time verification. This makes it impossible for a static type checker to reason about the code. Tyhp solves this by requiring developers to narrow the type of the string before using it in a dynamic context. Once narrowed, the compiler can verify the symbol exists and the dynamic access compiles to the same PHP code as standard PHP — no runtime overhead is added.
+In PHP, dynamic features like variable functions and dynamic method calls accept any string at runtime with no compile-time verification. This makes it impossible for a static type checker to reason about the code. Tyhp solves this by requiring developers to narrow the type of the string before using it in a dynamic context. Once narrowed, the compiler can verify the symbol exists and the dynamic access compiles to the same PHP code as standard PHP — no runtime overhead is added. Variable variables (`$$var`) are a separate case: they are banned outright (TYHP4133).
 
 ## The Special __ Types
 
 Tyhp introduces a set of special string value types (prefixed with __) that represent compile-time-verified symbol names. These types are subtypes of string that carry additional compile-time guarantees about the symbol they reference. Assigning a string literal to one of these types causes the compiler to verify the symbol exists at compile time.
 
 :::member[__VarName]
-A string that is a valid variable name in the current scope. Required for variable variables ($$var). The compiler verifies the referenced variable is declared in scope.
+A string that is a valid variable name in the current scope. Used with `variable_exists($input)` on a simple variable. Variable variables (`$$var`) are prohibited (TYHP4133) — `__VarName` does not re-enable them.
 :::
 
 :::member[__FunctionName]
@@ -33,7 +33,7 @@ A string that is a valid property name on type T. Required for dynamic property 
 :::
 
 :::member[__ClassName]
-A string that is a valid, existing class name (resolvable to a class declaration). Required for dynamic class instantiation (new $className()).
+A string that is a valid, existing class name (resolvable to a class declaration). Required for dynamic class instantiation (new $className()). When parameterized with an object-shape alias, `__ClassName<Shape>` names some class whose instances match `Shape`; `__ClassName<__New<Shape>>` additionally requires a public `new` that matches the shape constructor. See [Object Shapes and `__New<T>`](tyhp_3400_newTypeConstraint.md).
 :::
 
 :::member[__ConstName]
@@ -44,40 +44,32 @@ A string that is a valid constant name. Required for dynamic constant access.
 The __ types are compile-time-only annotations. They are erased from the PHP output — the generated PHP uses plain string values. No runtime overhead is added.
 :::
 
-## Variable Variables ($$var)
+## Variable Variables ($$var) — Prohibited
 
-PHP allows accessing variables by name using $$var. In Tyhp, the variable used must be narrowed to the __VarName type so the compiler can verify the referenced variable exists in the current scope.
+PHP allows accessing variables by name using `$$var`. Tyhp **prohibits** variable variables (TYHP4133). There is no `__VarName` exception and no `variable_exists($$input)` guard that re-enables them. Check whether a simple variable is in scope with `variable_exists($input)` (see Compile-Time Constructs).
 
 ```tyhp
 <?tyhp
 
 string $greeting = 'Hello';
-string $farewell = 'Goodbye';
 
-// OK: string literal automatically narrowed to __VarName
-__VarName $varName = 'greeting';
-echo $$varName; // Outputs: Hello
+// ERROR TYHP4133: variable variables are prohibited
+// __VarName $varName = 'greeting';
+// echo $$varName;
 
-// OK: narrowing via type guard
-mixed $input = getConfigKey();
-if ($input is string && variable_exists($$input)) {
-    echo $$input;
+// OK: existence check on a simple variable — not $$input
+if (variable_exists($greeting)) {
+    echo $greeting;
 }
 ```
 
 ```php
 <?php
 
-// Variable variables compile to standard PHP variable variables
 $greeting = 'Hello';
-$farewell = 'Goodbye';
 
-$varName = 'greeting';
-echo $$varName; // Outputs: Hello
-
-$input = getConfigKey();
-if (\is_string($input) && isset($$input)) {
-    echo $$input;
+if (\array_key_exists('greeting', \get_defined_vars())) {
+    echo $greeting;
 }
 ```
 
@@ -213,7 +205,7 @@ if (\method_exists($calc, $op)) {
 
 ## Dynamic Class Instantiation (new $className())
 
-Creating an object from a variable class name requires __ClassName. The compiler verifies that the string refers to an existing class.
+Creating an object from a variable class name requires __ClassName. The compiler verifies that the string refers to an existing class. `__ClassName<Shape>` (a shape without `__New`) does not allow `new $cls(...)`. `__ClassName<__New<Shape>>` does, and the argument list is checked against the shape constructor.
 
 ```tyhp
 <?tyhp
@@ -227,6 +219,10 @@ mixed $className = getHandlerClass();
 if ($className is string && \class_exists($className)) {
     // $className is narrowed to __ClassName
     $handler = new $className();
+}
+
+function spinUp(__ClassName<__New<Named>> $cls, string $name): Named {
+    return new $cls($name);
 }
 ```
 
@@ -248,11 +244,11 @@ The special __ types are subtypes of string. You can narrow a plain string to a 
 
 The following ExtCore / PHP existence checks are type guards (return `$param is …` in tyhpdefs) that narrow strings to the appropriate __ types:
 
-- `\class_exists($name)` — narrows `$name` to `__ClassName<object>` (use `\class_exists<T>($name)` for `__ClassName<T>`)
+- `\class_exists($name)` — narrows `$name` to `__ClassName<object>` (use `\class_exists<T>($name)` for `__ClassName<T>`, including an object-shape alias or `__New<Shape>`)
 - `\function_exists($name)` — narrows `$name` to `__FunctionName`
 - `\interface_exists($name)` / `\trait_exists($name)` / `\enum_exists($name)` — `__InterfaceName` / `__TraitName` / `__EnumName` (same default-`<object>` pattern)
-- `\method_exists($obj, $name)` — narrows `$name` to `__MethodName` of the receiver type (hardcoded fallback until tyhpdef can capture the receiver)
-- `\property_exists($obj, $name)` — narrows `$name` to `__PropertyName<T>`
+- `\method_exists($obj, $name)` / `\method_exists(Foo::class, $name)` — infers `T` from the receiver (object or `__ClassName<T>`) and narrows `$name` to `__MethodName<T>`
+- `\property_exists($obj, $name)` / `\property_exists(Foo::class, $name)` — infers `T` from the receiver and narrows `$name` to `__PropertyName<T>` (explicit `\property_exists<Widget>(…)` also works)
 - `is` type assertion — narrows to any __ type explicitly
 
 ```tyhp
@@ -283,7 +279,7 @@ if ($methodName is string && \method_exists($obj, $methodName)) {
 ## Best Practices
 
 :::tip
-Use the specific __ type annotations (__ClassName, __FunctionName, __PropertyName<T>, __MethodName, __VarName) for variables that hold symbol names. This enables compile-time verification of the symbol's existence.
+Use the specific __ type annotations (__ClassName, __FunctionName, __PropertyName<T>, __MethodName) for variables that hold symbol names. This enables compile-time verification of the symbol's existence. Variable variables (`$$var`) are prohibited — use `variable_exists($name)` on a simple variable when you need an existence check.
 :::
 
 :::tip
@@ -301,15 +297,15 @@ When working with configuration-driven class names or callbacks, narrow the type
 ## Common Mistakes
 
 :::danger
-Using a plain string for dynamic access without narrowing first. The compiler requires type narrowing — using an unverified string for $$var, $fn(), $obj->$prop, $obj->$method(), or new $cls() produces a compiler error.
+Using a plain string for dynamic access without narrowing first. The compiler requires type narrowing — using an unverified string for `$fn()`, `$obj->$prop`, `$obj->$method()`, or `new $cls()` produces a compiler error. Variable variables (`$$var`) are prohibited entirely (TYHP4133).
 :::
 
 :::danger
-Using extract() or compact() — these dynamically create or collect variables, which completely bypasses static analysis. Tyhp emits a warning when these functions are used.
+Using extract() or compact() — these dynamically create or collect variables, which completely bypasses static analysis. Tyhp reports errors TYHP4136 (extract) and TYHP4135 (compact).
 :::
 
 :::danger
-Attempting dynamic property creation ($obj->$newProp = value) where $newProp does not exist on the class. Tyhp disables dynamic property creation — all properties must be declared in the class definition or accessed via __get/__set magic methods.
+Attempting undeclared property creation (`$obj->newProp = value`) on a type other than exact `\stdClass`. Subclasses of `\stdClass` and types marked `#[\AllowDynamicProperties]` still get TYHP4134. Declare the property, or use `__get`/`__set` for a backing store. `(object)` on an existing object is identity and does not allow undeclared writes.
 :::
 
 ## Compiler Errors
@@ -335,9 +331,9 @@ if (\class_exists($cls)) {
 // ERROR: 'notAProperty' is not a property of User
 // __PropertyName<User> $bad2 = 'notAProperty';  // Compiler error!
 
-// ERROR: Variable variable without narrowing
+// ERROR TYHP4133: Variable variables are prohibited
 string $name = getUserInput();
-// echo $$name;  // Compiler error: use __VarName type
+// echo $$name;
 
 // ERROR: Variable function without narrowing
 string $fn = getCallback();
@@ -345,5 +341,5 @@ string $fn = getCallback();
 ```
 
 :::note
-Dynamic language features compile to the same PHP code as standard PHP — variable variables, variable functions, and dynamic member access produce identical PHP output. The __ types are compile-time-only annotations that are erased during compilation. No runtime overhead is added.
+Dynamic language features compile to the same PHP code as standard PHP — variable functions and dynamic member access produce identical PHP output. Variable variables (`$$var`) are not emitted; they are a compile error (TYHP4133). The __ types are compile-time-only annotations that are erased during compilation. No runtime overhead is added.
 :::

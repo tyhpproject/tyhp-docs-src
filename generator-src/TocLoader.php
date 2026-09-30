@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tyhp\Docs;
 
 /**
- * Loads docs/content/toc.json (JSON5) and resolves Markdown page items.
+ * Loads content/toc.json (JSON5) and resolves Markdown page items.
  */
 final class TocLoader
 {
