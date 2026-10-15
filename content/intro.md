@@ -3,7 +3,7 @@ title: 'What is Tyhp?'
 ---
 
 :::warning Beta
-Tyhp **805.1.0-beta.1** is a public beta. The compiler, type checker, emitter, CLI (`build` / `lint` / `init` / `install` / `composer` / `language_server` / `xdebug_proxy` / `generate_tyhpdef`), sourcemaps, and parsable lambdas work. Syntax and package versions may still change.
+Tyhp **805.1.0-beta.2** is a public beta. The compiler, type checker, emitter, CLI (`build` / `lint` / `init` / `install` / `composer` / `language_server` / `xdebug_proxy` / `generate_tyhpdef`), sourcemaps, and parsable lambdas work. Syntax and package versions may still change.
 :::
 
 Tyhp is a typed superset of the PHP language. The compiler type-checks Tyhp source and emits readable PHP. If you know PHP, most of the syntax is already familiar; Tyhp adds required types, null safety, generics, structs, and a handful of other constructs. The usual comparison is TypeScript’s relationship to JavaScript: a superset language that compiles to the original runtime’s language. Tyhp is not PHP, and it is not affiliated with the PHP Group.

@@ -2,11 +2,11 @@
 title: 'Release Planning'
 ---
 
-Tyhp **805.1.0-beta.1** is a public beta. This page describes versioning, what “beta” means, and how later releases are expected to work.
+Tyhp **805.1.0-beta.2** is a public beta. This page describes versioning, what “beta” means, and how later releases are expected to work.
 
 ## Current status
 
-- Compiler version: **805.1.0-beta.1** (MAJOR `805` = highest supported PHP is 8.5)
+- Compiler version: **805.1.0-beta.2** (MAJOR `805` = highest supported PHP is 8.5)
 - PHP floor: **8.2** (not 8.1)
 - Roadmap: **Tier 1 complete** (stories 01–16.5). Sourcemaps, Xdebug proxy, `tyhp language_server`, `generate_tyhpdef`, and `tyhpdef/php` / `tyhpdef/php-ext-*` are also in this beta. Remaining Tier 2+ work includes the web playground, optimizer, and later language features.
 - Semver compatibility guarantees apply from the first **stable** 805.x release, not from beta.
