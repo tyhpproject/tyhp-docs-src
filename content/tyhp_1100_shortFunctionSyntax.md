@@ -198,7 +198,7 @@ class ApiClient {
 
 ## Short Function Overload Signatures
 
-A short function can serve as the implementation body for function overload signatures. The overload signatures declare different parameter/return types, and the short function provides the single implementation.
+A short function can serve as the implementation body for function overload signatures. The overload signatures are `function` declarations that end with `;`; they declare the parameter and return types callers see, and the short function provides the single implementation. See [Function and Method Overloads](tyhp_1200_functionOverloads.md).
 
 ```tyhp
 <?tyhp
@@ -233,7 +233,7 @@ Short functions must have an expression body with =>. Using a block body or omit
 // }
 
 // ERROR — short function without => expression
-// fn myFunc(int $val): int;  // This is an overload signature, not a short function
+// fn myFunc(int $val): int;  // Overload signatures are written with `function`, not `fn`
 
 // CORRECT — use => with a single expression
 fn myFunc(int $val): int => $val + 5;

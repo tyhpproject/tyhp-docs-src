@@ -23,7 +23,7 @@ The same `tyhpdef/php` tree is used for every supported minor. Change `output.ph
 | `"8.4"` | same | `array_find()` / `array_find_key()` / `array_any()` / `array_all()` (`declare(php=">=8.4")`) |
 | `"8.5"` | same | `array_first()` / `array_last()` (`declare(php=">=8.5")`); `#[\Tyhp\Php(">=8.5")]` on selected Core members |
 
-Scalar extension methods that differ by minor (for example `pad` / `ucFirst` on strings) use the same `declare(php=…)` blocks inside `tyhp/core` `_tyhpdef/extensions/`.
+Scalar extension methods that differ by minor (for example `pad` / `ucFirst` on strings) use the same `declare(php=…)` blocks in the Tyhp source of `tyhp/core` (`StringExtensionsVersioned` and `ArrayExtensionsVersioned` in `tyhp_src/`). Each published `tyhp/core` artifact contains the `package.tyhpdef` for one PHP minor, with the variants that apply to that minor already selected.
 
 PHP Core attribute **classes** are gated the same way (`\Override` at 8.3, `\Deprecated` at 8.4, `\NoDiscard` and `\DelayedTargetValidation` at 8.5). Some **checks** still run below those minors — see [Engine attributes and `output.phpVersion`](#engine-attributes-and-outputphpversion).
 
@@ -89,8 +89,8 @@ A `declare(php="…") { … }` block gates only its body. Sibling code outside t
 function always_present(): void {}
 
 declare(php=">=8.4") {
-    function json_validate(string $json, int $depth = 512, int $flags = 0): bool {
-        return true;
+    function isValidJson(string $json, int $depth = 512, int $flags = 0): bool {
+        return \json_validate($json, $depth, $flags);
     }
 }
 ```
@@ -105,7 +105,7 @@ The colon / `enddeclare` form is the same kind of block for Tyhp statements.
 <?tyhp
 
 #[\Tyhp\Php(">=8.4")]
-function array_find(array $array, callable $callback): mixed {
+function findFirst(array $array, callable $callback): mixed {
     return null;
 }
 

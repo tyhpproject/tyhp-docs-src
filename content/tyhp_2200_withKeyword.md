@@ -60,7 +60,7 @@ $updated = clone $user with [
 
 Emit depends on whether `with` is a **statement** or an **expression**, whether the properties are `readonly`, and the target PHP version.
 
-**Statement** form (an assignment, or a bare `$obj with [...]`): non-readonly properties become direct assignments on the same variable — no temp, no helper.
+**Statement** form (an assignment, or a bare `$obj with [...]`): non-readonly properties become direct assignments — no temp, no helper. `new ... with` assigns on the new instance, in-place `with` assigns on the object you already hold, and `clone ... with` clones first and then assigns on the clone. On PHP 8.5, `clone ... with` instead emits native `clone($x, [...])`, as in the expression form below.
 
 ```php
 <?php
@@ -68,6 +68,7 @@ Emit depends on whether `with` is a **statement** or an **expression**, whether 
 $user = new User('Alice', 30);
 $user->role = 'admin';
 
+// PHP 8.2–8.4
 $updated = clone $user;
 $updated->name = 'Bob';
 $updated->age = 25;
@@ -75,8 +76,11 @@ $updated->age = 25;
 
 **Expression** form (for example `return clone $x with [...]`, or a `with` used as a value):
 
-- PHP 8.5: native `clone($x, [...])` (including `clone(new Color(), [...])` for `new ... with`)
-- PHP 8.2–8.4: `\Tyhp\ObjectHelper::with(...)`
+- `clone ... with` on PHP 8.5: native `clone($x, [...])`
+- `clone ... with` on PHP 8.2–8.4: `\Tyhp\ObjectHelper::with(clone $x, [...])`
+- `new ... with` on non-`readonly` properties: `\Tyhp\ObjectHelper::with(new X(), [...])` on every PHP version
+- `new ... with` that sets `readonly` properties: see below
+- In-place `$obj with [...]` used as a value: `\Tyhp\ObjectHelper::with($obj, [...])`, which mutates and returns the same instance
 
 ```php
 <?php
@@ -93,7 +97,7 @@ return \Tyhp\ObjectHelper::with(new Widget(), ['color' => "blue"]);
 
 **Readonly `new ... with`:**
 
-- PHP 8.4: `clone (new class(...) extends \Color { public function __clone(): void { ... } })`
+- PHP 8.2–8.4: `clone (new class(...) extends \Color { public function __clone(): void { ... } })`
 - PHP 8.5: `clone(new Color(), ['alpha' => 128])`
 
 ## In-Place with on an Existing Instance
@@ -129,22 +133,22 @@ $same = $user with [
 
 ## Compiled PHP Output for In-Place with
 
-For an object instance, the in-place form compiles to direct property-assignment statements on the same variable. The expression's value is the object itself, so it can be assigned or chained without a clone or a constructor call.
+For an object instance, the in-place form compiles to direct property-assignment statements. The expression's value is the object itself, so it can be assigned without a clone or a constructor call. Used as a value inside a larger expression (for example `return $user with [...]`), it emits `\Tyhp\ObjectHelper::with($user, [...])`.
 
 ```php
 <?php
 
 $user = new User('Alice', 30);
 
-// $user with [...] emits direct property assignments on the same variable
-$user->age = 31;
-$user->role = 'admin';
+// $same = $user with [...] aliases the object, then assigns properties
 $same = $user;
+$same->age = 31;
+$same->role = 'admin';
 
 // No clone, no new — $same and $user reference the same object
 ```
 
-For a struct value (which is backed by a PHP associative array), the in-place form emits as an array replace/merge that writes the updated keys back into the same variable.
+A struct is always a PHP associative array. As a statement, the in-place form reassigns the target variable (or property) with `\array_replace`.
 
 ```tyhp
 <?tyhp
@@ -164,12 +168,15 @@ $coords with [alt => 100.0];
 ```php
 <?php
 
-$coords = ['lat' => 40.7, 'lng' => -74.0, 'alt' => 0.0];
+$coords = ['alt' => 0.0, 'lat' => 40.7, 'lng' => -74.0];
 
-// In-place struct with emits an array replace into the same variable
+// In-place struct with reassigns the same variable
 $coords = \array_replace($coords, ['alt' => 100.0]);
 ```
 
+A property target is reassigned the same way: `$this->coords with [alt => 100.0];` emits `$this->coords = \array_replace($this->coords, ['alt' => 100.0]);`.
+
+When an in-place struct `with` is used as a value (`$b = $a with [...]`, `return $a with [...]`), it emits `\array_replace($a, [...])` and leaves `$a` unchanged.
 :::note
 Choose the form by intent: use new ... with or clone ... with when you want a brand-new value (the clone form preserves immutability of the source), and use $obj with [...] when you want to update the object you already hold and keep the same identity. Because the in-place form mutates the existing instance, it cannot assign `readonly` properties after construction — use `clone $obj with [...]` (or `new ... with`) for those. A struct in-place `with` rebinds the local array (PHP array semantics); an object in-place `with` mutates the same instance (PHP object semantics).
 :::
@@ -203,6 +210,7 @@ $app = new App() with [
 ```php
 <?php
 
+// PHP 8.2–8.4
 $app = new App();
 $app->name = 'MyApp';
 $app->config = \Tyhp\ObjectHelper::with(clone $defaultConfig, ['debug' => true, 'env' => 'production']);
@@ -245,7 +253,7 @@ $q = clone $p with [z => 5.0];
 
 ## with on Structs
 
-Since structs compile to PHP associative arrays, the with keyword on structs compiles to `\array_replace` (not `\array_merge`). That rebinds the array the same way a PHP function rebinds an array parameter — it does not mutate a shared object identity.
+Structs are always PHP associative arrays, so the with keyword on structs compiles to `\array_replace` (not `\array_merge`). That rebinds the array the same way a PHP function rebinds an array parameter — it does not mutate a shared object identity. Named and anonymous struct types support the same operations: property access and writes, `with`, `clone ... with`, `isset`, `??`, and array key aliases.
 
 ```tyhp
 <?tyhp
@@ -263,8 +271,32 @@ $elevated = clone $coords with [alt => 100.0];
 ```php
 <?php
 
-$coords = ['lat' => 40.7, 'lng' => -74.0, 'alt' => 0.0];
+$coords = ['alt' => 0.0, 'lat' => 40.7, 'lng' => -74.0];
 $elevated = \array_replace($coords, ['alt' => 100.0]);
+```
+
+An anonymous struct type behaves the same way:
+
+```tyhp
+<?tyhp
+
+struct { string $name; int $age; } $person = new struct {
+    string $name;
+    int $age;
+} with [name => 'Alice', age => 30];
+
+$person->age = 31;
+$person with [age => 32];
+$renamed = clone $person with [name => 'Bob'];
+```
+
+```php
+<?php
+
+$person = ['name' => 'Alice', 'age' => 30];
+$person['age'] = 31;
+$person = \array_replace($person, ['age' => 32]);
+$renamed = \array_replace($person, ['name' => 'Bob']);
 ```
 
 ## Best Practices

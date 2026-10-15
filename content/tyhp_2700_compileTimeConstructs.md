@@ -10,7 +10,7 @@ Tyhp provides four compile-time language constructs that are evaluated during co
 
 ## nameof() — Get Symbol Name as String
 
-The nameof() construct returns the string name of a variable, class, method, property, or constant. The argument must be a valid, resolvable symbol reference. The compiler resolves the name at compile time and emits it as a string literal — no runtime reflection is involved.
+The nameof() construct returns the string name of a variable, class, method, property, or constant. The argument must be a valid, resolvable symbol reference. The compiler resolves the name at compile time and emits it as a string literal — no runtime reflection is involved. A class imported with `use` resolves the same way at the top level of a file and inside functions (`nameof(User)` is `'User'`, `nameof(User::$name)` is `'name'`), and an import used only by `nameof()` is not reported as unused.
 
 ```tyhp
 <?tyhp
@@ -114,7 +114,7 @@ nameof() is refactoring-safe. If you rename a property, method, variable, or cla
 
 ## typeof() — Get a `\Tyhp\Type` from a type
 
-The typeof() construct returns a `\Tyhp\Type` instance for a type expression. It accepts types (`int`, `User`, `int|string`, `Optional<int>`, `?int`, `T`). Scalars compile to `\Tyhp\Type::int()` / `::string()` / etc.; declared classes compile to `\Tyhp\Type::fromClassName(...)`; structs compile to `\Tyhp\Type::struct(...)` with the property schema; source type aliases compile to a factory call (`UserId()`, `Optional(\Tyhp\Type::int())`). This is different from PHP's gettype() (a runtime string) and from `\Tyhp\Type::of($value)` (runtime inspection of a value).
+The typeof() construct returns a `\Tyhp\Type` instance for a type expression. It accepts types (`int`, `User`, `int|string`, `Optional<int>`, `?int`, `T`). Scalars compile to `\Tyhp\Type::int()` / `::string()` / etc.; declared classes compile to `\Tyhp\Type::fromClassName(...)` with the fully-qualified class name (`typeof(User)` in `namespace App\Models` emits `\App\Models\User::class`); structs compile to `\Tyhp\Type::struct(...)` with the property schema; source type aliases compile to a factory call (`UserId()`, `Optional(\Tyhp\Type::int())`). This is different from PHP's gettype() (a runtime string) and from `\Tyhp\Type::of($value)` (runtime inspection of a value).
 
 ```tyhp
 <?tyhp
@@ -144,7 +144,7 @@ class Repository<T> {
 
 $intType = \Tyhp\Type::int();
 $unionType = \Tyhp\Type::union(\Tyhp\Type::int(), \Tyhp\Type::string());
-$userType = \Tyhp\Type::fromClassName(User::class);
+$userType = \Tyhp\Type::fromClassName(\User::class);
 $idType = UserId();
 $optType = Optional(\Tyhp\Type::int());
 
@@ -313,7 +313,7 @@ Beyond the four compile-time constructs above, Tyhp has several other features t
 - Generics — type parameters are erased from PHP signatures. Tracking (`HasGenerics`, factories, binders) is emitted only when the bound type is used at runtime or a generic-typed property remains. Every emitted generic class/method/function is stamped `#[\Tyhp\GenericRuntime]`. Foreign compiled-library sites use `\Tyhp\Generic::bind`; PHP / `typeof` interop for aliases still uses `aliasFactory` (not `bind`). See [Generics](tyhp_0500_generics.md).
 - Static value types (__ClassName, __FunctionName, etc.) — compile-time string subtypes that are erased to plain string in PHP output.
 - Type guard return types ($param is Type) — compiled to bool return type in PHP output. The type narrowing information is used only by the checker.
-- Function overload signatures — only the implementation body is emitted to PHP. Overload signatures are compile-time declarations for the checker.
+- Function and method overload signatures — only the implementation body is emitted to PHP (for an interface or `abstract` method, the last signature). Overload signatures are compile-time declarations that callers are checked against. See [Function and Method Overloads](tyhp_1200_functionOverloads.md).
 - Trait extends/implements requirements — validated at compile time, stripped from PHP output. PHP traits cannot extend or implement.
 - PHP version gates (`declare(php=…)` and `#[\Tyhp\Php]`) — never written to PHP, same treatment as `declare(output_file=…)`. A gate that holds for only some versions at or above `output.phpVersion` becomes a `\PHP_VERSION_ID` check in the output. See [PHP Version Gating](tyhp_0320_phpVersionGating.md).
 - The is keyword (alias for instanceof) — compiled to standard PHP instanceof operator.

@@ -67,6 +67,8 @@ $intBox = \Tyhp\Generic::bind(\Vendor\Box::class, \Tyhp\Type::int())(42);
 $result = \Tyhp\Generic::bind($h->identity(...), \Tyhp\Type::string())($value);
 ```
 
+A first-class callable of a generic function (`identity(...)` or `identity<string>(...)`) keeps its type-binding identity, also when it needs [implicit conversions](tyhp_1600_operatorOverloads.md#conversions-on-first-class-callables) for a parameter. The compiler wraps it with `\Tyhp\Generic::wrapCallable`, and `\Tyhp\Generic::bind` on that value binds the type arguments while the conversions still apply.
+
 PHP builtin and overlay generics that omit the stamp stay erased / inlined. Same-compilation erased classes (no remaining runtime use and no remaining generic-typed properties) emit a plain `new` / plain call, still stamped `erased: true`.
 
 `#[\Tyhp\EraseGeneric]` is compile-only (`#[\Tyhp\NoEmit]`). It is legal on a class, a property, or a promoted constructor parameter. On a method or function it is an error. The attribute is not inherited; a tracked child of an erased generic parent does not call `parent::__initGenerics__`.
@@ -164,7 +166,7 @@ enum Result<T> {
 
 ## Generic Functions and Methods
 
-Standalone functions and class methods can declare their own generic type parameters. When calling a generic function, type arguments can be provided explicitly or inferred from the arguments.
+Standalone functions and class methods can declare their own generic type parameters. When calling a generic function, type arguments can be provided explicitly or inferred from the arguments. A literal argument infers the widened type, so `boxOf('plain')` where `boxOf<T>(T $x): Box<T>` is `Box<string>`. Elements of `array<Cell<T>>` or a variadic `Cell<T> ...` are merged, so a `Cell<int>` and a `Cell<string>` infer `T` as `int|string`. When the arguments do not determine a type parameter, the type expected at the call is used, then the parameter's default. If none of those apply, the call is an error and the type argument must be written explicitly.
 
 ```tyhp
 <?tyhp
@@ -258,7 +260,7 @@ Generic type parameters can have default types, specified with = after the optio
 <?tyhp
 
 // Promise defaults TReturn to mixed (runtime: tyhp/async)
-class Promise<TReturn extends void|mixed = mixed> {
+class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> {
     // ...
 }
 
@@ -428,9 +430,80 @@ class SortedList<T extends Comparable> {
 SortedList<User> $list = new SortedList<User>();
 ```
 
-## Missing Type Argument Errors
+## Generic Types Without Type Arguments
 
-When a generic type has required (non-defaulted) type parameters, omitting them produces an error.
+A generic class written without type arguments, such as `Box` for `class Box<T>`, is the same type as `Box<mixed>` when it is the **source** of an assignment (a variable assignment, an argument, or a return) to an instantiation of the same class. Each type parameter widens to its declared `extends` bound, or to `mixed` when it has none. Members read through that raw receiver use the same widened types (`$raw->value` is `mixed` for an unbounded `T`, or `int|string` when `T extends int|string`). Inside the class, `$this` still sees the class's own type parameters. The result is one-directional:
+
+- `Box` is **not** assignable to `Box<int>`, because its value could be anything.
+- `Box<int>` is assignable to `Box`.
+- `Box` is assignable to `Box<mixed>` and to `Box`.
+
+```tyhp
+<?tyhp
+
+namespace App;
+
+class Box<T> {
+    public function __construct(public T $value) {}
+}
+
+function rawToMixed(Box $raw): Box<mixed> {
+    return $raw;                 // OK
+}
+
+function instantiationToRaw(Box<int> $box): Box {
+    return $box;                 // OK
+}
+
+function rawToInt(Box $raw): Box<int> {
+    return $raw;                 // Error: Box is not assignable to Box<int>
+}
+
+function takesInt(Box<int> $box): void {}
+
+function passRaw(Box $raw): void {
+    takesInt($raw);              // Error: Box is not assignable to Box<int>
+}
+```
+
+To get a `Box<int>`, construct one with the type argument (`new Box<int>(5)`) or let the constructor arguments infer it (`new Box(5)` in a `Box<int>` context).
+
+A parameter with a bound widens to that bound instead of `mixed`. The bound applies wherever the class is declared: later in the same file, in another file, or in a PHP stub or tyhpdef. A bound that refers to the parameter itself, such as `T extends Node<T>`, is valid.
+
+```tyhp
+<?tyhp
+
+namespace App;
+
+class Counter<T extends int|string> {
+    public function __construct(public T $value) {}
+}
+
+function rawToBound(Counter $raw): Counter<int|string> {
+    return $raw;                 // OK: T widens to int|string
+}
+
+function rawToNarrower(Counter $raw): Counter<int> {
+    return $raw;                 // Error
+}
+
+class Node<T extends Node<T>> {
+    public ?T $next = null;
+}
+
+function keep(Node $n): Node {
+    return $n;                   // OK
+}
+```
+
+Two cases behave differently:
+
+- A redundant `instanceof` check keeps the more precise type. After `$box instanceof Box` on a value declared `Box<int>|null`, the variable is still `Box<int>`. An `instanceof Box` check on a `mixed` value yields the raw `Box`, which is not assignable to `Box<int>`.
+- A bare `\Closure` stays assignable to any `\Closure<…>` instantiation.
+
+## Type Argument Count Errors
+
+A type argument list must supply every type parameter that has no default. Supplying only some of them is an error (TYHP4036). Writing the class name with no argument list at all is the raw form described above.
 
 ```tyhp
 <?tyhp
@@ -440,13 +513,10 @@ class Pair<T, U> {
     public U $second;
 }
 
-// ERROR — Pair requires 2 type arguments, 0 provided
-// Pair $p = new Pair();
-
-// ERROR — Pair requires 2 type arguments, 1 provided
+// ERROR — Pair expects 2 type arguments, 1 provided
 // Pair<int> $p = new Pair<int>();
 
-// OK — all required type arguments provided
+// OK — all type arguments provided
 Pair<int, string> $p = new Pair<int, string>();
 ```
 
@@ -461,7 +531,7 @@ Use constraints (extends) to limit type parameters to types that support the ope
 :::
 
 :::tip
-Use defaults on type parameters when there is a sensible common case (e.g., `Promise<TReturn extends void|mixed = mixed>`). This reduces boilerplate for callers.
+Use defaults on type parameters when there is a sensible common case (e.g., `Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>>`, where an omitted `TReturn` is `mixed`). This reduces boilerplate for callers.
 :::
 
 :::tip

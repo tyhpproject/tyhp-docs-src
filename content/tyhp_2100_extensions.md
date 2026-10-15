@@ -81,7 +81,7 @@ extension Ops<T extends int|string> extends \App\MyClass<T> {
 
 The `extends` inside `<T extends int|string>` is the type-parameter constraint. The `extends` after the name, or the `extends` that opens a group, is the target.
 
-Those type parameters live on the extension symbol, or on the group for `extends<T>`. They are in scope for the target and for the members in that block. They are not copied onto each method. A method's type parameters are only the ones written on that method (`function mapTo<R>(callable(T): R $fn): array<R>`). Reusing an in-scope name on the method is `TYHP4366`. A type parameter that is never referenced is `TYHP4365`.
+Those type parameters live on the extension symbol, or on the group for `extends<T>`. They are in scope for the target and for the members in that block. A call binds them only when the receiver matches the whole target, so `Pair<string, int>->right()` is `int` and `Pair<int, int>->right()` stays `TRight`. They are not copied onto each method. A method's type parameters are only the ones written on that method (`function mapTo<R>(callable(T): R $fn): array<R>`). Reusing an in-scope name on the method is `TYHP4366`. A type parameter that is never referenced is `TYHP4365`.
 
 Writing the target on the member (`extends Type $this`, or `<Type>` after the operator token) is `TYHP4361`. Adaptation clauses in `use extension` still qualify an operator by target: `E::operator +<Money> hide`.
 
@@ -237,7 +237,9 @@ A spliced member substitutes the caller's argument where the parameter stood, wh
 
 A tyhpdef `{ &get; }` is referenceable, as are `&__get` and `&offsetGet`.
 
-**A parameter used more than once is evaluated once.** The compiler introduces a local for the first evaluation and reuses it, so `$n->doubled()` with `fn doubled(): int => $this + $this` does not evaluate the receiver twice.
+**A receiver or argument used more than once is evaluated once.** When the receiver or an argument is more than a simple variable or literal and the member reads its parameter more than once (reads behind `&&`, `||`, `??`, or a conditional arm count), the compiler assigns the value to a local at the first read that always runs and reuses it. So `$n->doubled()` with `fn doubled(): int => $this + $this` does not evaluate the receiver twice.
+
+If a read behind a short circuit comes before the first read that always runs, the value cannot be evaluated exactly once at the call site, so the call is not spliced. A member that emits a PHP method is called as a normal method call. An erased member (a short `=>` member) has no method to fall back to and reports `TYHP4181`.
 
 ```tyhp
 <?tyhp
@@ -438,7 +440,70 @@ class Money {
 
 `use extension` is **opt-in by default**, including for tyhpdef-declared extensions. Extensions from other namespaces or files are imported with `use extension` instead of a regular `use` statement. This makes it explicit that you are bringing extension methods into scope.
 
-The import supports trait-like adaptations using curly braces: method `as` aliases, postfix `hide`, and `insteadof` (including on operators). `as` on operators is an error (`TYHP4170`) — use `hide` or `insteadof`. `hide` is a **contextual** keyword only inside `{ }` adaptations (so `function hide()` elsewhere stays valid).
+An extension declared in your project sources applies in three places: the file that declares it, any file that imports it with `use extension`, and every file once any file declares it with `global use extension`. In any other file a method call is **TYHP4101** (``Symbol `shout` is not found for type `string` ``), and a binary or unary operator from that extension is **TYHP4029**.
+
+```tyhp
+<?tyhp
+
+namespace App\Ext;
+
+extension Shout extends string {
+    fn shout(): string => \strtoupper($this) . '!';
+}
+
+echo "a"->shout(), "\n";   // same file: no import needed
+```
+
+```tyhp
+<?tyhp
+
+namespace App\Other;
+
+use extension \App\Ext\Shout;
+
+string $s = 'b';
+echo $s->shout(), "\n";    // imported: works
+```
+
+A file that neither declares nor imports `Shout` gets TYHP4101 for `$s->shout()`.
+
+An `operator convert` declared in an extension follows the same scope. In a file where the extension is active, an `int` passes where the target class is expected and the call compiles to the extension class's static `__from` method. In any other file the conversion does not apply and the argument is TYHP4010. This also holds for first-class callables: `\Probe\takeWallet(...)` accepts an `int` only in files where the conversion is active, and is a plain native callable elsewhere. See [Operator Overloads](tyhp_1600_operatorOverloads.md#conversions-declared-in-an-extension).
+
+```tyhp
+<?tyhp
+
+namespace Probe;
+
+class Wallet { public int $amount = 0; }
+
+extension WalletConv extends Wallet {
+    operator convert(int $value): self {
+        Wallet $w = new Wallet();
+        $w->amount = $value;
+        return $w;
+    }
+}
+
+function takeWallet(Wallet $w): int {
+    return $w->amount;
+}
+
+echo takeWallet(5);   // same file: converts
+```
+
+```tyhp
+<?tyhp
+
+namespace Other;
+
+use extension \Probe\WalletConv;
+
+echo \Probe\takeWallet(5);   // imported: converts
+```
+
+A file without the `use extension` line reports TYHP4010 for `\Probe\takeWallet(5)`.
+
+The import supports trait-like adaptations using curly braces: method `as` aliases, postfix `hide`, and `insteadof` (including on operators). `as` on operators is an error (`TYHP4170`) — use `hide` or `insteadof`. `hide` is a **contextual** keyword only inside `{ }` adaptations (so `function hide()` elsewhere stays valid). A file's adaptations apply to its top-level statements as well as to code inside functions and methods.
 
 ```tyhp
 <?tyhp

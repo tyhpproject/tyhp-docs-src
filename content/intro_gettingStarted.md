@@ -94,7 +94,7 @@ php build/src/index.php
 
 With the Composer compiler package you can use `vendor/bin/tyhp build` or `composer tyhp build` instead of a global `tyhp`.
 
-Until Packagist lists the `tyhp/*` and `tyhpdef/*` packages, use a compiler checkout so path repositories can resolve `runtime/packages/`.
+The `tyhp/*` and `tyhpdef/*` packages install from Packagist. To develop against a local checkout of the runtime package sources instead, see [Path repositories](project_composerPackages.md#path-repositories-compiler-checkout).
 
 ## The Compiled Output
 

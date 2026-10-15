@@ -46,7 +46,7 @@ class Repository {
 
 ## Overloads with Static Value Types
 
-Literal values (static value types) can be used as parameter types in overloads. This allows the compiler to select different return types based on the literal value passed at a call site. `tyhpdef/php` uses this for `\json_decode`: `$associative = true` returns `JsonAssoc` (objects as arrays), `false` / default `null` return `JsonObject` (objects as `\stdClass`), and `JSON_THROW_ON_ERROR` drops `|null`. `\json_encode(..., JSON_THROW_ON_ERROR)` returns `string` instead of `string|false`. JSON scalars stay scalars in every decode mode. Bitwise `|` of `JSON_*` constants is not a literal, so those calls use the `int $flags` catch-all.
+Literal values (static value types) can be used as parameter types in overloads. This allows the compiler to select different return types based on the literal value passed at a call site. `tyhpdef/php` uses this for `\json_decode`: `$associative = true` returns `JsonAssoc` (objects as arrays), `false` / default `null` return `JsonObject` (objects as `\stdClass`), and `JSON_THROW_ON_ERROR` drops `|null`. `\json_encode(..., JSON_THROW_ON_ERROR)` returns `string` instead of `string|false`. JSON scalars stay scalars in every decode mode. A bitwise `|`, `&`, or `^` of known integer constants matches a positive integer-literal parameter when every bit of that literal is set, so `\json_encode($v, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES)` is `string`. The literal with the most of those bits wins. When two literals match equally, the call uses the `int` signature. A runtime `int` and a bare integer that is not that literal stay on `int`.
 
 ```tyhp
 <?tyhpdef

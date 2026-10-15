@@ -6,7 +6,7 @@ status:
   state: complete
 ---
 
-Structs are lightweight, schema-based value types in Tyhp. They compile to PHP associative arrays, giving you the performance of arrays with the type safety of named structures. Structs support property types, default values, nullable-as-optional, array key aliases, structural (schema-based) type compatibility, inheritance via extends, and anonymous inline declarations. Unlike classes, structs contain only typed properties — no methods, constants, or static members.
+Structs are lightweight, schema-based value types in Tyhp. They always compile to plain PHP associative arrays, giving you the performance of arrays with the type safety of named structures. Structs support property types, default values, nullable-as-optional, array key aliases, structural (schema-based) type compatibility, inheritance via extends, and anonymous inline declarations. Unlike classes, structs contain only typed properties — no methods, constants, or static members.
 
 :::note
 Struct declarations are completely erased from PHP output. They exist only at compile time for type checking. Instantiation produces an associative array. PHP callers see `array`; the compiler does not emit a runtime shape check.
@@ -64,6 +64,41 @@ type Config = struct {
 // Config $bad = new Config();
 
 Config $ok = new Config() with [host => 'localhost'];
+```
+
+A nullable property without a default is left out of the array when you omit it, and reading it yields `null`:
+
+```tyhp
+<?tyhp
+
+type Opts = struct { string $name; ?string $nick; };
+
+Opts $o = new Opts() with [name => 'ann'];
+?string $nick = $o->nick;   // null; compiles to ($o['nick'] ?? null)
+```
+
+A default may itself construct another struct. The nested defaults are folded into the outer array:
+
+```tyhp
+<?tyhp
+
+type Inner = struct {
+    int $a = 1;
+    string $b = 'x';
+};
+
+type Outer = struct {
+    Inner $inner = new Inner();
+    int $n = 0;
+};
+
+Outer $o = new Outer();
+```
+
+```php
+<?php
+
+$o = ['inner' => ['a' => 1, 'b' => 'x'], 'n' => 0];
 ```
 
 ## Array Key Aliases
@@ -283,7 +318,7 @@ $first = $args[0];
 
 ## Anonymous Structs
 
-Structs can appear inline in type position without a name — parameters, returns, properties, bounds, and unions. Expression `new struct { … } with […]` still builds a one-off value. Group a struct type as an arm of `|` / `&` with parentheses.
+Structs can appear inline in type position without a name — parameters, returns, properties, bounds, and unions. Expression `new struct { … } with […]` still builds a one-off value. Anonymous struct types support everything named structs do: property access and writes, `with`, `clone … with`, `isset`, `??`, and array key aliases. Group a struct type as an arm of `|` / `&` with parentheses.
 
 ```tyhp
 <?tyhp
@@ -353,7 +388,7 @@ $p2 = \array_replace($p1, ['x' => 5.0]);
 
 ## In-Place Updates with 'with'
 
-The with keyword can also be applied directly to an existing struct value — without new or clone — to update properties in place. For structs this is a convenient shorthand for reassigning `\array_replace` of the existing array back to the same variable. Because structs are value types backed by arrays, only the variable being updated is affected; any prior copies remain unchanged.
+The with keyword can also be applied directly to an existing struct value — without new or clone — to update properties in place. As a statement, this is a shorthand for reassigning `\array_replace` of the existing array back to the same variable or property (`$this->point with [x => 9.0];` emits `$this->point = \array_replace($this->point, ['x' => 9.0]);`). Because structs are plain arrays, only the variable being updated is affected; any prior copies remain unchanged. When the in-place `with` is used as a value (`$q = $p with [x => 9.0];`), it emits `\array_replace($p, [...])` for `$q` and leaves `$p` unchanged.
 
 ```tyhp
 <?tyhp

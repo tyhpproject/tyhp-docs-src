@@ -8,6 +8,10 @@ use League\CommonMark\Environment\Environment;
 use League\CommonMark\Event\DocumentParsedEvent;
 use League\CommonMark\Extension\CommonMark\CommonMarkCoreExtension;
 use League\CommonMark\Extension\CommonMark\Node\Block\FencedCode;
+use League\CommonMark\Extension\CommonMark\Node\Inline\Code;
+use League\CommonMark\Extension\CommonMark\Node\Inline\HtmlInline;
+use League\CommonMark\Extension\CommonMark\Node\Inline\Link;
+use League\CommonMark\Extension\HeadingPermalink\HeadingPermalinkExtension;
 use League\CommonMark\Extension\Table\Table;
 use League\CommonMark\Extension\Table\TableExtension;
 use League\CommonMark\MarkdownConverter;
@@ -41,15 +45,65 @@ final class MarkdownRenderer
                     'attributes' => ['class' => 'table-responsive'],
                 ],
             ],
+            'heading_permalink' => [
+                'insert' => 'none',
+                'apply_id_to_heading' => true,
+                'id_prefix' => '',
+            ],
         ];
 
         $environment = new Environment($config);
         $environment->addExtension(new CommonMarkCoreExtension());
         $environment->addExtension(new TableExtension());
+        $environment->addExtension(new HeadingPermalinkExtension());
         $environment->addEventListener(DocumentParsedEvent::class, static function (DocumentParsedEvent $event): void {
             foreach ($event->getDocument()->iterator(NodeIterator::FLAG_BLOCKS_ONLY) as $node) {
                 if ($node instanceof Table) {
                     $node->data->append('attributes/class', 'table table-striped table-bordered');
+                }
+            }
+        });
+        // Pages link to each other by source file name (`cli_build.md#anchor`); the site serves `.html`.
+        $environment->addEventListener(DocumentParsedEvent::class, static function (DocumentParsedEvent $event): void {
+            foreach ($event->getDocument()->iterator() as $node) {
+                if (!$node instanceof Link) {
+                    continue;
+                }
+                $url = $node->getUrl();
+                if (\preg_match('#^[A-Za-z0-9_\-]+\.md(\#.*)?$#', $url, $m) === 1) {
+                    $node->setUrl(\substr($url, 0, \strpos($url, '.md')) . '.html' . ($m[1] ?? ''));
+                }
+            }
+        });
+        // Text inside a raw `<code>…</code>` wrapper is HTML-encoded by its author (the
+        // diagnostics reference writes `<code>` + HtmlEncode(message)), but backtick spans nested
+        // in that wrapper are CommonMark code spans, which never decode entities and would show
+        // `&lt;` literally. Decode the author's encoding so the renderer escapes exactly once.
+        $environment->addEventListener(DocumentParsedEvent::class, static function (DocumentParsedEvent $event): void {
+            foreach ($event->getDocument()->iterator() as $node) {
+                if (!$node instanceof Code) {
+                    continue;
+                }
+                $open = 0;
+                for ($prev = $node->previous(); $prev !== null; $prev = $prev->previous()) {
+                    if (!$prev instanceof HtmlInline) {
+                        continue;
+                    }
+                    $tag = \strtolower($prev->getLiteral());
+                    if ($tag === '<code>') {
+                        $open++;
+                    } elseif ($tag === '</code>') {
+                        $open--;
+                    }
+                }
+                if ($open > 0) {
+                    $node->setLiteral(\strtr($node->getLiteral(), [
+                        '&lt;' => '<',
+                        '&gt;' => '>',
+                        '&quot;' => '"',
+                        '&#39;' => "'",
+                        '&amp;' => '&',
+                    ]));
                 }
             }
         });

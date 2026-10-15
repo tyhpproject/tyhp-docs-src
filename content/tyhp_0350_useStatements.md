@@ -28,6 +28,8 @@ use function App\Helpers\formatDate;
 use const App\Config\MAX_RETRIES;
 ```
 
+A `use const` name is always read from the global namespace, whatever namespace the importing file declares. In `namespace Demo9;`, `use const Demo9\Util\LIMIT;` makes `LIMIT` compile to `\Demo9\Util\LIMIT`, and an alias (`use const Demo9\Util\LIMIT as CAP;`) or a group member resolves the same way.
+
 ## Group Use Declarations
 
 Group use declarations import multiple symbols from the same namespace prefix in a single statement.
@@ -106,7 +108,7 @@ The generic arguments on the alias are a compile-time concept. They tell the Tyh
 
 ## Use Extension Statements
 
-The `use extension` statement imports extension method providers into the current scope. Extension methods allow adding methods to existing types without modifying them. When you import an extension, its methods become available on the extended type within the importing file.
+The `use extension` statement imports extension method providers into the current scope. Extension methods allow adding methods to existing types without modifying them. When you import an extension, its methods become available on the extended type within the importing file. An extension declared in a file is already in scope in that file. In a file that neither declares nor imports an extension (and where no `global use extension` covers it), calling one of its methods reports **TYHP4101**.
 
 ```tyhp
 <?tyhp

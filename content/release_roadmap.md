@@ -8,7 +8,7 @@ status:
 
 Tyhp is built in a deliberately ordered sequence of stories, grouped into four tiers. The guiding principle is a thin vertical slice that compiles and runs end-to-end as early as possible.
 
-**This beta (805.1.0-beta.1) is Tier 2 through 21.12.** Stories **27** (object shapes), **27.1** (callable shapes + `type Name = struct { };`), **27.2** (block-target extension syntax), and **27.3** (split runtime / docs / AIDevGuide / IDE plugin into dedicated git repos) are next, still in this beta, before deferred Story 22. Other stories remain planned unless noted below.
+**This beta (805.1.0-beta.1) is Tier 2 through 21.12.** Stories **27** (object shapes), **27.1** (callable shapes + `type Name = struct { };`), **27.2** (block-target extension syntax), and **27.3** (split runtime / docs / AI developer guide / IDE plugin into dedicated git repos) are next, still in this beta, before deferred Story 22. Other stories remain planned unless noted below.
 
 Stories are numbered contiguously from 01 to 30 with additive sub-stories (`08.5`, `10.5`, `14.5`, `16.5`, `19.5`, `20.5`, `27.1`, `27.2`, `27.3`). Each documentation page carries a Tier/Story badge.
 
@@ -48,7 +48,7 @@ The two flagships are **Story 08 — the type checker** (the correctness engine 
 1. **Story 17 — Sourcemap generation** (shipped).
 2. **Story 18 — XDebug proxy** (shipped).
 3. **Story 19 — Language Server (LSP)** (shipped; stdio only).
-4. **Story 19.5 — IDE clients (`tyhp-lang`)** (shipped).
+4. **Story 19.5 — IDE clients (VS Code and PhpStorm)** (shipped).
 5. **Story 20 — Tyhpdef generator** (C# CLI integration; `generate_tyhpdef` and `package.tyhpdef` on `tyhp build` shipped, plus `--php-targets` gated emit).
 6. **Story 20.5 — PHP version gating** (`declare(php=…)` / `#[\Tyhp\Php]`).
 7. **Story 21 — PHP extension Composer packages** (`tyhpdef/php` + `tyhpdef/php-ext-*`; one package per extension across 8.2–8.5 with `declare(php=…)` / `#[\Tyhp\Php]` gates). Includes the built-in scalar method catalog (`$name->toUpper()`, …) via `global use extension \Tyhp\StringExtensions`.
@@ -56,7 +56,7 @@ The two flagships are **Story 08 — the type checker** (the correctness engine 
 9. **Story 27 — Object shapes and `__New<T>`** (next).
 10. **Story 27.1 — Callable shapes and `type Name = struct { };`** (after 27).
 11. **Story 27.2 — Block-target extension syntax** (`extension Name extends Type`; after 27.1 in numbering, may run in parallel).
-12. **Story 27.3 — Split runtime, docs, AIDevGuide, and IDE plugin into dedicated git repos** (after 27.2).
+12. **Story 27.3 — Split runtime, docs, AI developer guide, and IDE plugin into dedicated git repos** (after 27.2).
 13. **Story 22 — Web playground** (live .tyhp → PHP) — DEFERRED, not in this beta.
 
 ## Tier 3 — Advanced — not in this beta

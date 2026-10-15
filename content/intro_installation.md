@@ -36,7 +36,7 @@ You can also run Tyhp through the root Composer script that `tyhp init` writes:
 composer tyhp build
 ```
 
-`composer require` already installs the compiler package and writes a `composer.lock`. `tyhp init` then merges `composer.json` (adding `tyhpdef/php`, `tyhp/core`, `allow-plugins.tyhp/core`, and the scripts) and writes `tyhp.json`. Init does **not** install those newly-added packages for you — because the lock file already exists from the `require` step, use `composer update` (not `composer install`, which would only reinstall what the lock already has) so `tyhpdef/php`, `tyhp/core`, and the `post-autoload-dump` hooks land.
+`composer require` already installs the compiler package and writes a `composer.lock`. `tyhp init` then merges `composer.json` (adding `tyhpdef/php`, `tyhp/core`, `allow-plugins.tyhp/core`, and the scripts) and writes `tyhp.json`, `src/index.tyhp`, and the `build/` and `tyhpdef/` directories. It stops with an error if `tyhp.json` already exists, and it adds Tyhp entries to an existing `.gitignore`. Init does **not** install those newly-added packages for you — because the lock file already exists from the `require` step, use `composer update` (not `composer install`, which would only reinstall what the lock already has) so `tyhpdef/php`, `tyhp/core`, and the `post-autoload-dump` hooks land.
 
 The first `composer require tyhp/core` often does not install ambient tyhpdefs in that same transaction. After adding core, run `composer update` or `tyhp composer sync`. If `tyhp build` reports missing extras (`TYHP7701`), that is the recovery path. See [CLI: Composer](cli_composer.md).
 
@@ -126,8 +126,10 @@ OS:             ...
 
 ## Runtime packages
 
-Compiled projects need Composer packages such as `tyhpdef/php` (PHP builtin tyhpdefs) and `tyhp/core`. `tyhp init` adds `tyhp/core` as **`@dev`** in `require`, `tyhpdef/php` as **`@dev`** in `require-dev`, and `tyhp/compiler` in `require-dev`. After `composer install`, `tyhp build` can still write additional `composer.json` requires when `build.updateComposer` is enabled — compiled `tyhp/*` pins match `output.phpVersion` plus **that package's own** `X.Y` (`8.4` + core `0.2` → `tyhp/core: 804.0.2`). Until Packagist lists the runtime packages, a source checkout of this repository can resolve them via Composer path repositories under `runtime/packages/` (those pins use the source version).
+Compiled projects need Composer packages such as `tyhpdef/php` (PHP builtin tyhpdefs) and `tyhp/core`. `tyhp init` adds `tyhp/core` as **`@dev`** in `require`, `tyhpdef/php` as **`@dev`** in `require-dev`, and `tyhp/compiler` in `require-dev` at the exact version of the compiler package that matches the CLI.
 
-How to pin versions for apps vs libraries is on the Composer Runtime Packages page.
+After each build, `tyhp build` prints the other runtime packages your compiled code needs (for example `tyhp/async` when it uses `async`/`await`). When `build.updateComposer` is enabled, it writes them into the `composer.json` in `output.publishPath` and runs `composer install` there. The compiled `tyhp/*` versions it writes match `output.phpVersion` plus **that package's own** `X.Y` (`8.4` + core `0.2` → `tyhp/core: 804.0.2`). Otherwise, require them yourself. Packages you opt into, such as `tyhp/io` and `tyhp/parallel`, are never added for you; see [Runtime Packages Overview](package_intro.md).
+
+How to pin versions for apps vs libraries is on the [Composer Runtime Packages](project_composerPackages.md) page.
 
 `tyhpdef/php` in this alpha is a **PHP 8.2 baseline**. APIs that exist only on PHP 8.3–8.5 may be missing from the stubs.

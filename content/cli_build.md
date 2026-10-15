@@ -44,7 +44,7 @@ The build action performs the following steps in order:
    - Library projects with executable entrypoint files report `TYHP7505` and skip writing those artifacts.
    - If `extra.tyhp.package` already exists on that `composer.json`, the build adds missing keys and array items only; it does not remove or change existing entries.
    - The build never writes to CLI `tyhpdef/`. See [CLI: Tyhpdef Generation](cli_tyhpdefGeneration.md#auto-generation-during-build).
-   - Generated `package.tyhpdef` keeps the library's Tyhp surface: attributes, class-level `type`, in-package `global use`, and `#[\Tyhp\GenericRuntime]` on every emitted generic class/method/function. Consumers use `\Tyhp\Generic::bind` at foreign sites rather than helper names. `internal` symbols are omitted.
+   - Generated `package.tyhpdef` keeps the library's Tyhp surface: attributes, class-level `type`, in-package `global use`, and `#[\Tyhp\GenericRuntime]` on every emitted generic class/method/function. Consumers use `\Tyhp\Generic::bind` at foreign sites rather than helper names. `internal` symbols are omitted. A function or method [overload set](tyhp_1200_functionOverloads.md) is published as its declared signatures; the implementation's own signature is not published.
 10. Run the optimizer (currently a no-op).
 11. Run the emitter to transform Tyhp-specific constructs into PHP equivalents.
 12. Write compiled PHP files to the output directory. When `build.generateSourcemap` is true, also write a sibling `.php.map` (Source Map v3) and append a `//# sourceMappingURL=` comment to each PHP file. When `build.updateComposer` is true, also update `composer.json` in `output.publishPath` with Tyhp runtime package requires. When `output.publishContent` is set, copy those extra files into `output.publishPath`.
@@ -63,7 +63,7 @@ The build action reads configuration from the tyhp.json project file. Key config
 - output.publishPath — Published package root for `composer.json` (including library `extra.tyhp.package`) and `package.tyhpdef` (default: `"."`, the project root). Supports interpolation, for example `"./publish/{version}"`.
 - output.publishClean — When true, delete and recreate `output.publishPath` before compiling (default: `false`). Refused when `publishPath` is the project root.
 - output.publishContent — Array of copy rules for extra files written into `output.publishPath` after emit. `src` / `dst` / `exclude` interpolate; `dst` may also use per-file variables such as `{fileName}`. See [Project Options List](project_optionsList.md#string-interpolation).
-- output.phpVersion — Target PHP version: "8.0" through "8.5". If omitted, defaults to **"8.2"** and emits warning **TYHP4306** once per compilation. This is the compiler check/emit target, not the managed PHP used by `tyhp generate_tyhpdef`. For `tyhpdef/php` / `tyhpdef/php-ext-*`, it also selects which version-gated APIs are visible (8.2–8.5 matrix). `{phpVersion.id}` in other keys is the Tyhp PHP id (`"8.2"` → `802`). See [CLI: Lint](cli_lint.md#php-version-matrix-82-85).
+- output.phpVersion — Target PHP version: "8.0" through "8.5". If omitted, defaults to **"8.2"** and emits warning **TYHP4306** once per compilation. This is the compiler check/emit target, not the managed PHP used by `tyhp generate_tyhpdef`. For `tyhpdef/php` / `tyhpdef/php-ext-*`, it also selects which version-gated APIs are visible (8.2–8.5 matrix). `{phpVersion.id}` in other keys is the Tyhp PHP id (`"8.2"` → `802`). See [CLI: Lint](cli_lint.md#php-version-matrix-8285).
 - output.strictTypes — Add declare(strict_types=1) to all output files (default: true).
 - output.comments — Include comments from source in the output (default: true).
 - output.namespacePrefix — Optional prefix added to all namespaces in output.
@@ -74,10 +74,6 @@ The build action reads configuration from the tyhp.json project file. Key config
 - build.sourcemapIncludeContent — When `true` with sourcemaps on, embed original `.tyhp` text in each map's `sourcesContent` (default: `false`).
 - build.generateTyhpdef — For **applications**, write `package.tyhpdef` in the publish directory when `true`. **Libraries always emit** `package.tyhpdef` and additive-merge `extra.tyhp.package` on publish-directory `composer.json`; this key is ignored for `"type": "library"`.
 - build.updateComposer — Generate or update composer.json in `output.publishPath` with PSR-4 autoloading for the compiled PHP (default: false).
-- build.structBacking — How structs are backed in PHP: "array" (default: "array").
-- build.decimalBacking — Decimal math backend: "bcmath" or "gmp" (default: "bcmath").
-- build.decimalScale — Default scale for decimal operations (default: 28).
-- build.decimalRounding — Default rounding mode (default: `"halfUp"`).
 - build.allowEval — Re-enable the eval() function, which is disabled by default in Tyhp (default: false).
 - build.experimentalReadonlyCloneWith — Allow `clone ... with` on `readonly` properties for PHP 8.2–8.4 (default: false). PHP 8.5+ does not need this flag.
 - build.runtimeGenericChecks — Emit runtime type checks at generic boundaries (default: false).

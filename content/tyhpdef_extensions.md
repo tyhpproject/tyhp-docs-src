@@ -75,7 +75,7 @@ extension StringOperators extends string {
 
 Here `StringOperators__tyhpExtensionBacker` is the Tyhp name for the declared PHP backer. The compiler rewrites it to `StringOperators` in emitted PHP while splicing the mapping expression into each operator call site.
 
-Package authors put multi-statement bodies in `tyhp_src/` and describe the emitted PHP class with `class PhpName as Name__tyhpExtensionBacker`. Short `=>` members that map onto builtins need no backer. `tyhp/core` follows this split: `_tyhpdef/extensions/*.tyhpdef` holds the mappings plus `global use extension \Tyhp\StringExtensions;` (and the matching Array / Int / Float / Bool / Closure files); `tyhp_src/` holds brace-body helpers such as `StringExtensions::reverse`.
+Package authors put multi-statement bodies in `tyhp_src/` and describe the emitted PHP class with `class PhpName as Name__tyhpExtensionBacker`. Short `=>` members that map onto builtins need no backer. `tyhp/core` follows this split: its scalar extensions are Tyhp source files in `tyhp_src/` (`StringExtensions.tyhp`, `ArrayExtensions.tyhp`, `IntExtensions.tyhp`, `FloatExtensions.tyhp`, `BoolExtensions.tyhp`, `ClosureExtensions.tyhp`), each declaring `global use extension`, and the generated `package.tyhpdef` publishes the mappings. Brace-body helpers such as `StringExtensions::reverse` stay as static calls into the compiled backer class.
 
 An extension must contain at least one member; an empty block reports `TYHP4172`. Declaring the same extension name more than once in the base and included tyhpdefs is also an error. `deprecated` and `obsolete` are allowed on the extension and its members.
 
@@ -155,7 +155,7 @@ Unary and conversion overloads use the same mapped form. A single-parameter `ext
 namespace Tyhp;
 
 final class Decimal {
-    extension operator +(self $value): int|float => \Tyhp\Decimal::__asNumeric($value);
+    extension operator +(self $value): float => \Tyhp\Decimal::__asNumeric($value);
 
     extension operator convert(int $value): self => \Tyhp\Decimal::__from($value);
 
@@ -296,4 +296,4 @@ class Money {
 - `$this` / `self` in standalone members refer to the **target**; in class-body mappings they refer to the enclosing tyhpdef class
 - Bodyless `operator …;` means native PHP passthrough; `extension operator` always needs a `=>` expression
 - File-level `use extension` is opt-in unless `global use extension`; class-body `use extension` auto-activates that type’s attached surface (minus `hide`)
-- `tyhp/core` ships `_tyhpdef/extensions/*.tyhpdef` with `global use extension \Tyhp\<ScalarType>Extensions` and `tyhp_src/` backers (`class PhpName as Name__tyhpExtensionBacker`) for multi-statement bodies
+- `tyhp/core` declares its scalar extensions in `tyhp_src/<ScalarType>Extensions.tyhp` with `global use extension`, and its generated `package.tyhpdef` maps them to backer classes (`class PhpName as Name__tyhpExtensionBacker`) for multi-statement bodies

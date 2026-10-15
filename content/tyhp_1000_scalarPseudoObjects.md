@@ -14,7 +14,7 @@ story: '21'
 state: complete
 ```
 
-The `tyhp/core` package ships a built-in catalog of those methods (`length`, `contains`, `toUpper`, `mapped`, …) and activates them for the whole compilation with `global use extension \Tyhp\StringExtensions` (and the matching `ArrayExtensions`, `IntExtensions`, `FloatExtensions`, `BoolExtensions`, `ClosureExtensions`). You do **not** write `use extension` in each file.
+The `tyhp/core` package ships a built-in catalog of those methods (`length`, `contains`, `toUpper`, `mapped`, …) and activates them for the whole compilation with `global use extension \Tyhp\StringExtensions` (and the matching `ArrayExtensions`, `IntExtensions`, `FloatExtensions`, `BoolExtensions`, `ClosureExtensions`). The catalog is ordinary Tyhp `extension` source inside `tyhp/core`; see [`tyhp/core`](package_core.md) for the full method list. You do **not** write `use extension` in each file.
 
 ```tyhp
 <?tyhp
@@ -28,11 +28,23 @@ string $trimmed = "  spaces  "->trim();
 array<int, int> $nums = [3, 1, 4];
 array<int, int> $evens = $nums->filtered(fn(int $v): bool => $v % 2 === 0);
 array<int, string> $labels = $nums->mapped(fn(int $v): string => (string)$v);
-int $n = 42->abs();
-float $rounded = 3.14159->round(2);
+int $n = (42)->abs();
+float $rounded = (3.14159)->round(2);
 ```
 
-`$name->length()` emits `\Tyhp\StringHelper::strlen($name)`. `$name->contains("World")` emits `\str_contains($name, "World")`.
+Compiled PHP (excerpt):
+
+```php
+$len = \Tyhp\StringHelper::strlen($name);
+$has = \str_contains($name, "World");
+$trimmed = \trim("  spaces  ", " \t\n\r\0\x0B");
+$evens = \array_filter($nums, fn(int $v): bool => ($v % 2) === 0, 0);
+$labels = \array_map(fn(int $v): string => (string) $v, $nums);
+$n = \abs(42);
+$rounded = \round(3.14159, 2, \PHP_ROUND_HALF_UP);
+```
+
+Integer and float literals must be parenthesised before `->` (`(42)->abs()`, `(-1.5)->abs()`, `(0x1F)->toHex()`); string and array literals can be used directly (`"a,b"->split(",")`, `[1, 2, 3]->count()`).
 
 ## Unicode by default, `byte` prefix for bytes
 
@@ -49,11 +61,14 @@ Because `tyhp/core` already issued `global use extension`, a file-level `use ext
 
 use extension \Tyhp\StringExtensions {
     StringExtensions::toLower hide;
-};
+}
 
-string $name = 'hello_world';
-int $len = $name->length();
+function lengthOf(string $name): int {
+    return $name->length();
+}
 ```
+
+Inside the file, `toLower` is no longer available as a method; every other `StringExtensions` method still is.
 
 See [Use Statements](tyhp_0350_useStatements.md#local-use-overlaying-global-use).
 
@@ -66,7 +81,8 @@ Declare an `extension` with the target on the header (`extends string`) or in a 
 
 extension StringHelpers extends string {
     function toCamelCase(): string {
-        return $this;
+        string $parts = \str_replace('_', ' ', $this);
+        return \lcfirst(\str_replace(' ', '', \ucwords($parts)));
     }
 
     function trimLower(): string {
@@ -76,6 +92,7 @@ extension StringHelpers extends string {
 
 string $name = 'hello_world';
 string $camel = $name->toCamelCase();
+string $tidy = $name->trimLower();
 ```
 
 Compiles to:
@@ -86,7 +103,10 @@ declare(strict_types=1);
 
 $name = 'hello_world';
 $camel = \StringHelpers::toCamelCase($name);
+$tidy = \strtolower(\trim($name));
 ```
+
+`toCamelCase` has several statements, so it is emitted as a static method on `StringHelpers` (with `$this` passed as the first argument) and call sites call it. `trimLower` is a single `return`, so its expression is inlined at each call site.
 
 When the extension lives in another file or namespace, import it with `use extension`:
 
@@ -99,7 +119,7 @@ string $name = 'hello_world';
 string $camel = $name->toCamelCase();
 ```
 
-See Use Statements for adaptation syntax (`as` / hide) on `use extension`.
+Without the import, a call to the extension's method is **TYHP4101**. See Use Statements for adaptation syntax (`as` / hide) on `use extension`.
 
 ## Method Chaining (User Extensions)
 
@@ -118,7 +138,8 @@ extension StringHelpers extends string {
     }
 
     function dashed(): string {
-        return \str_replace(' ', '-', $this);
+        string $spaced = \str_replace(' ', '-', $this);
+        return $spaced;
     }
 }
 
@@ -130,8 +151,10 @@ $result = $input->trimmed()->lower()->dashed();
 <?php
 
 $input = "  Hello World  ";
-$result = \StringHelpers::dashed(\StringHelpers::lower(\StringHelpers::trimmed($input)));
+$result = \StringHelpers::dashed(\strtolower(\trim($input)));
 ```
+
+`trimmed` and `lower` are single-`return` members, so they are inlined; `dashed` has two statements, so it stays a static call.
 
 The built-in catalog chains the same way: `"  Hello  "->trim()->toLower()`.
 

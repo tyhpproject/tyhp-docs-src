@@ -27,7 +27,7 @@ tyhp generate_tyhpdef --vendor
 tyhp generate_tyhpdef --vendor=/path/to/vendor
 tyhp generate_tyhpdef --source=./lib/**/*.php --split=namespace
 tyhp generate_tyhpdef --validate ./tyhpdef/
-tyhp generate_tyhpdef --audit-stubs=runtime/packages/php/_tyhpdef --out=stub-audit.md
+tyhp generate_tyhpdef --audit-stubs=./tyhpdef --out=stub-audit.md
 tyhp generate_tyhpdef --ext-name=curl --php-targets=8.2,8.3,8.4,8.5
 tyhp generate_tyhpdef --help
 ```
@@ -98,7 +98,7 @@ Unqualified names in PHPDoc and native hints that have no `use` import are rewri
 
 ### Optional peers (`externs.tyhpdef`)
 
-After emitting this package's own types, generation classifies remaining foreign signature names against a catalog of existing `tyhpdef/*` packages (in-repo `runtime/packages`, or other catalog roots). The catalog indexes **real** `class` / `interface` / `enum` declarations only — another package's `extern` does not count as providing the type. Catalog hits emit `extern` with that catalog kind (`extern class` / `interface` / `enum`) so the placeholder matches the originating declaration. A hand-written specified kind that disagrees is `TYHP8029`. When indexing those files, `{` and `}` inside `/** */`, `/* */`, `//`, and quoted strings are not namespace delimiters. Classification uses the **PHP** package's `composer.json` (`require` / `suggest` / `require-dev` / `ext-*`), not the wrapper's own manifest.
+After emitting this package's own types, generation classifies remaining foreign signature names against a catalog of existing `tyhpdef/*` wrapper packages. The catalog is read from the `packages/tyhpdef/` directory of a `tyhp-runtime-src` checkout, located through the `TYHP_RUNTIME_SRC` environment variable or a sibling `tyhp-runtime-src/packages` directory (see [Path repositories](project_composerPackages.md#path-repositories-compiler-checkout)). When no checkout is found the catalog is empty and every foreign name is left unresolved. The catalog indexes **real** `class` / `interface` / `enum` declarations only — another package's `extern` does not count as providing the type. Catalog hits emit `extern` with that catalog kind (`extern class` / `interface` / `enum`) so the placeholder matches the originating declaration. A hand-written specified kind that disagrees is `TYHP8029`. When indexing those files, `{` and `}` inside `/** */`, `/* */`, `//`, and quoted strings are not namespace delimiters. Classification uses the **PHP** package's `composer.json` (`require` / `suggest` / `require-dev` / `ext-*`), not the wrapper's own manifest.
 
 | Condition | Result |
 |-----------|--------|
@@ -206,7 +206,7 @@ Root `post-autoload-dump` (written by `tyhp init`) runs `--install-binary` then 
 
 `--require-stubs` (default **off**) makes a missing Layer 2 stub cache an error (`TYHP7514`). Without it, a missing cache is warning `TYHP7513` and harvest is skipped. Psalm vs PHPStan type disagreement is warning `TYHP7515` (Layer 1 type is kept). Class-level `@template` lists are unified **by position** across corpora (PHPStan names win when present) so synonym placeholders such as `TArrayValue` / `TData` / `TValue` become one parameter. An explicit constraint becomes both the Tyhp `extends` bound and the default; `@template T of mixed` emits `T = mixed` with no bound; an unconstrained parameter has neither. When a defaulted parameter would be followed by a required one, trailing unconstrained parameters receive `= mixed` so the list is legal Tyhp. Harvest applies `@implements` / `@extends` type arguments onto the Layer 1 parent names when the parent is already listed and the argument count matches that parent's harvested generic arity in the same run (unknown parents from another extension keep the stub arity). Changing a type's generic list or inheritance header is overlay `partial class Foo<…> implements …;` (header-only); changed members are a separate `partial class Foo { … }` in the same stub overlay. If a conventional placeholder would still be undeclared, harvest does not write the overlay (`TYHP7521`). A Layer 2 declaration is omitted when the harvested signature matches Layer 1 (doc-comment hole-fill alone does not produce an overlay). `tyhp generate_tyhpdef --audit-stubs=<tree>` reports how committed Layer 2 compares to those corpora (consensus and harvest faithfulness) without regenerating files.
 
-Stub corpora are fetched into a gitignored cache (`tools/stub-cache/`). URLs and credit live in `runtime/README.md` and [`THIRD_PARTY.md`](https://github.com/tyhpproject/tyhp/blob/main/THIRD_PARTY.md). Generated overlay trees may include a `SOURCES.md`.
+Stub corpora are fetched into a gitignored cache (`tools/stub-cache/`). URLs and credit are listed in [`THIRD_PARTY.md`](https://github.com/tyhpproject/tyhp/blob/main/THIRD_PARTY.md). Generated overlay trees may include a `SOURCES.md`.
 
 Hand-written overlays load last at bind time. `--verify` **applies** overlays when comparing final forms (see below). See [Tyhpdef Overlays](tyhpdef_overlays.md).
 

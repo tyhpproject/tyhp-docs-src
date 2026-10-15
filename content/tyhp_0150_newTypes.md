@@ -456,18 +456,20 @@ function array_map<TZip extends callable>(
 
 ## The `decimal` Type
 
-Tyhp introduces a `decimal` type for precise arithmetic calculations. In the compiled PHP, a `decimal` value is an instance of the `\Tyhp\Decimal` wrapper class that handles all arithmetic operations using bcmath, gmp, or a pure-PHP fallback (configurable in `tyhp.json`). There is no `19.99d` suffix. Construct decimals with `\Tyhp\decimal('19.99')` or `new \Tyhp\Decimal(...)`.
+Tyhp introduces a `decimal` type for precise arithmetic calculations. In the compiled PHP, a `decimal` value is an instance of the `\Tyhp\Decimal` wrapper class that handles all arithmetic operations using the best extension that PHP has loaded (`ext-decimal`, `ext-bcmath`, or `ext-gmp`) or a pure-PHP fallback. `decimal` and `\Tyhp\Decimal` are the same type, and `decimal` needs no import in namespaced files. See [The tyhp/decimal Package](package_decimal.md) for the backends, scale, and rounding. Construct decimals with `\Tyhp\decimal('19.99')`, `new \Tyhp\Decimal(...)`, or a `(decimal)` cast.
 
 ```tyhp
 <?tyhp
 
 decimal $price = \Tyhp\decimal('19.99');
 decimal $tax = \Tyhp\decimal('2.00');
-decimal $total = $price + $tax;  // Precise arithmetic
+decimal $total = $price + $tax;  // 21.99, precise arithmetic
 
 class Invoice {
-    public decimal $amount;
-    public decimal $taxRate;
+    public function __construct(
+        public decimal $amount,
+        public decimal $taxRate,
+    ) {}
 
     public function calculateTotal(): decimal {
         return $this->amount * (\Tyhp\decimal('1') + $this->taxRate);
@@ -475,21 +477,26 @@ class Invoice {
 }
 ```
 
-The `decimal` type supports all standard arithmetic operators (`+`, `-`, `*`, `/`, `%`, `**`), comparison operators (`==`, `<`, `>`, `<=`, `>=`, `<=>`), unary negation (`-$val`), and casts to `int`, `float`, and `string`. These compile to static method calls on `\Tyhp\Decimal` (for example `\Tyhp\Decimal::__add($a, $b)`).
+The `decimal` type supports the arithmetic operators (`+`, `-`, `*`, `/`, `%`, `**`), unary `-` and `+`, the comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `<=>`), the compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`, `**=`), and casts to `int`, `float`, and `string`. The operators accept a `string`, `int`, or `float` as the other operand, on either side (`$price * 3`, `100 - $price`); only `**` requires a `decimal` base and an `int` exponent. The results have type `decimal`, `bool` (comparisons), or `int` (`<=>`); unary `+` gives a `float`. The operators compile to static method calls on `\Tyhp\Decimal` (for example `\Tyhp\Decimal::__add($a, $b)`).
 
 ## The `(decimal)` Cast
 
-Tyhp provides a `(decimal)` cast operator for converting values to the `decimal` type, similar to PHP's built-in casts like `(int)` and `(float)`.
+The `(decimal) $expr` cast converts a `string`, `int`, or `float` expression (or a union of those) to `decimal`, in the same way the `(int)` and `(float)` casts convert to their types. The result is a `decimal` that can be assigned, passed, or used as an operand. The cast compiles to `\Tyhp\Decimal::__from($expr)`.
 
 ```tyhp
 <?tyhp
 
 float $price = 19.99;
-decimal $precisePrice = (decimal) $price;
+decimal $precisePrice = (decimal) $price;   // 19.98999999999999843681 (a float keeps its binary error)
 
 string $amount = "99.95";
-decimal $parsed = (decimal) $amount;
+decimal $parsed = (decimal) $amount;        // 99.95
+decimal $withTax = (decimal) $amount * '1.2';  // 119.94
 ```
+
+A string that is not a valid decimal number throws `\InvalidArgumentException` when the cast runs; prefer strings (or integers) for exact values. Casting any other type is an error (**TYHP4008**), including `bool`, `null`, arrays, nullable types such as `?string`, and objects that implement `\Tyhp\Contracts\DecimalConvertible`; use `\Tyhp\decimal($value)` for a `DecimalConvertible` object. Casting an expression that is already `decimal` changes nothing and reports the warning **TYHP4205**.
+
+Without a cast, the compiler converts a `string`, `int`, or `float` to `decimal` only for call arguments and `return` values. A plain assignment such as `decimal $x = '2.5';` is an error (**TYHP4008**).
 
 ## Compiled PHP Output for `decimal`
 
@@ -501,6 +508,12 @@ The `decimal` type compiles to `\Tyhp\Decimal` instances. Arithmetic operations 
 decimal $a = \Tyhp\decimal('10.5');
 decimal $b = \Tyhp\decimal('3.2');
 decimal $result = $a + $b;
+if ($a > $b) {
+    $a += 1;
+}
+decimal $left = 100 - $a;
+decimal $parsed = (decimal) '99.95';
+int $whole = (int) $a;
 ```
 
 Compiles to:
@@ -512,6 +525,12 @@ declare(strict_types=1);
 $a = \Tyhp\decimal('10.5');
 $b = \Tyhp\decimal('3.2');
 $result = \Tyhp\Decimal::__add($a, $b);
+if (\Tyhp\Decimal::__isGreaterThan($a, $b)) {
+    $a = \Tyhp\Decimal::__add($a, 1);
+}
+$left = \Tyhp\Decimal::__subtract(100, $a);
+$parsed = \Tyhp\Decimal::__from('99.95');
+$whole = $a->__toInt();
 ```
 
 ## The `struct` Base Type
@@ -588,9 +607,9 @@ Use `: self<T>` or the declaring class name (`: Promise<T>`), **not** `: static<
 ```tyhp
 <?tyhp
 
-final class Promise<TReturn extends void|mixed = mixed> {
-    public static function _async<T extends void|mixed>(callable(): T $fn): self<T> {
-        return new self<T>($fn);
+final class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> {
+    public static function _async<T extends void|mixed>(callable(): T $fn): self<__Awaited<T>> {
+        return new self<__Awaited<T>>($fn);
     }
 }
 ```
@@ -638,14 +657,16 @@ call-site class reference (including its type arguments).
 
 ## The `Promise<T>` Type
 
-Tyhp provides a `Promise<T>` type for async/await support. The `Promise` class is defined as `Promise<TReturn extends void|mixed = mixed>` where `TReturn` is the fulfillment value type (default `mixed`). The constraint allows `Promise<void>` for async functions that do not return a value. A bare `Promise` is `Promise<mixed>`, not `Promise<void>`.
+Tyhp provides a `Promise<T>` type for async/await support. The `Promise` class is declared as `Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>>`, where `TReturn` is the fulfillment value type. A bare `Promise` is `Promise<mixed>`, not `Promise<void>`; `Promise<void>` is the type of async functions that do not return a value.
+
+The `__Awaited<void|mixed>` bound means a promise always carries a *settled* type: `Promise<Promise<int>>`, a union with a promise member such as `Promise<int|Promise<string>>`, and `Promise<T>` for an unconstrained type parameter `T` (which could itself be a promise) are rejected with TYHP4373. See [`__Awaited<T>`](#type-utility-types) below.
 
 ```tyhp
 <?tyhp
 
-// An async function returns a Promise
+// An async function returns a Promise of its declared return type
 async function fetchUser(int $id): User {
-    // The actual return type is Promise<User>
+    // A call has type Promise<User>; awaiting it gives a User
     $response = await \httpGet("/users/{$id}");
     return User::fromJson($response);
 }
@@ -655,7 +676,7 @@ Promise<User> $userPromise = fetchUser(42);
 User $user = await $userPromise;
 ```
 
-Key `Promise` methods include static combinators (`all<T>`, `race<T>`, `resolved<T>`, `rejected<T>`, `delay`, `timeout<T>`, `batch<TItem, TResult>`, `run<T>`), instance methods (`then<TResult>`, `catch<TResult>`, `finally`), and the internal `_async`/`_await` methods that the `async`/`await` keywords desugar to. `async { ... }` is a block expression that evaluates to `Promise<T>` (not a callable). See the Async/Await documentation for full details.
+Key `Promise` methods include static combinators (`all<T>`, `race<T>`, `resolved<T>`, `rejected<T>`, `delay`, `timeout<T>`, `batch<TItem, TBatchReturn>`, `run<T>`), instance methods (`then`, `catch`, `finally`), and the internal `_async`/`_await` methods that the `async`/`await` keywords desugar to. `async { ... }` is a block expression that evaluates to `Promise<T>` (not a callable). See the [Async/Await documentation](tyhp_2600_asyncAndAwait.md) and the [`tyhp/async` package reference](package_async.md#the-promise-class) for full details.
 
 ## Internal Compiler Types
 
@@ -849,7 +870,31 @@ Keeps only members of union `T` that are assignable to `U`.
 :::
 
 :::member[__Awaited<T>]
-Recursively unwraps `Promise<T>` (and nested promises) to the resolved type.
+The type a value has once every `\Tyhp\Promise` layer around it has settled. It unwraps only `\Tyhp\Promise` (a user class that merely has "Promise" in its name is left alone), repeatedly and member by member over unions: `__Awaited<Promise<Promise<int>>>` is `int`, and `__Awaited<Promise<int>|string>` is `int|string`. `Promise<void>` settles to `void`; a bare `Promise`, `Promise<mixed>`, and `mixed` settle to `mixed`; every other type is unchanged.
+
+While `T` is an open type parameter, `__Awaited<T>` stays deferred, because `T` could itself be a `Promise<X>` whose awaited type is `X`. A deferred `__Awaited<T>` is an opaque type: only `__Awaited<T>` (and `never`) is assignable to it, so a function body cannot return a `T` value or a `mixed` value as `__Awaited<T>`. Narrow the value with `$value is __Awaited<T>` instead. Once `T` is bound, by argument inference or by an explicit type argument as in `Promise::run<User>(…)`, the utility resolves to the settled type.
+
+Constrain your own type parameters with `extends __Awaited<X>` when they must hold a settled type: `T` then satisfies `X` and is already its own awaited type, so `Promise<T>` and `__Awaited<T>` agree. Supplying a promise, a union with a promise member, or an unconstrained type parameter for such a parameter reports TYHP4373. `Promise<TReturn>` itself is declared this way.
+
+```tyhp
+<?tyhp
+
+namespace App;
+
+use Tyhp\Promise;
+
+function settleAll<T extends __Awaited<void|mixed>>(array<Promise<T>> $promises): Promise<array<T>> {
+    return async {
+        array<T> $values = [];
+        foreach ($promises as $promise) {
+            $values[] = await $promise;
+        }
+        return $values;
+    };
+}
+```
+
+`__Awaited` never appears in emitted PHP: type hints use the settled type, and runtime type tests (`is`, `typeof`) reify it through `\Tyhp\Type::awaited()`.
 :::
 
 :::member[__New<T>]

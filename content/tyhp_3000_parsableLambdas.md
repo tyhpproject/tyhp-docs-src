@@ -7,126 +7,170 @@ status:
   note: 'PropertyPath and Expression trees: TCallableShape, nameof(fn), instanceof/is, serialization, and structural equality'
 ---
 
-Tyhp supports parsable lambdas — a feature that allows the compiler to capture the abstract syntax tree (AST) of an inline fn expression instead of just compiling it to a closure. When a function parameter is typed as PropertyPath<callable(T): R> or Expression<callable(T): R>, passing an inline fn expression causes the compiler to emit a data structure describing the expression tree. The receiving function can then inspect the structure of the lambda at runtime — walking property accesses, method calls, operators, and constants — to translate the expression into another domain such as SQL queries, validation rules, or serialization mappings.
+Tyhp supports parsable lambdas — a feature that allows the compiler to capture the abstract syntax tree (AST) of an inline `fn` expression instead of just compiling it to a closure. When a function parameter is typed `PropertyPath<callable(T): R>` or `Expression<callable(T): R>`, passing an inline `fn` expression causes the compiler to emit a data structure describing the expression tree. The receiving function can then inspect the structure of the lambda at runtime — walking property accesses, method calls, operators, and constants — to translate the expression into another domain such as SQL queries, validation rules, or serialization mappings.
+
+The types come from the `tyhp/lambda` package; see [tyhp/lambda](package_lambda.md) for the full API.
 
 :::note
-This is the same concept as C#'s Expression<Func<T, TResult>>, which powers Entity Framework's LINQ-to-SQL. The parameter type drives the behavior: if a parameter is typed Expression<callable(T): R>, the compiler emits an expression tree; if typed callable or \Closure, the compiler emits a normal closure.
+This is the same concept as C#'s `Expression<Func<T, TResult>>`, which powers Entity Framework's LINQ-to-SQL. The parameter type drives the behavior: if a parameter is typed `Expression<callable(T): R>`, the compiler emits an expression tree; if typed `callable` or `\Closure`, the compiler emits a normal closure.
 :::
 
 ## PropertyPath<callable(T): R> — Type-Safe Property References
 
-PropertyPath<callable(T): R> is the simplest form of parsable lambda. It captures a chain of property accesses from an fn expression. When a parameter is typed PropertyPath<callable(T): R>, the compiler converts fn (T $x) => $x->propA->propB into a PropertyPath object containing the chain ['propA', 'propB'] plus type information.
+`PropertyPath<callable(T): R>` is the simplest form of parsable lambda. It captures a chain of property accesses from an `fn` expression. When a parameter is typed `PropertyPath<callable(T): R>`, the compiler converts `fn ($p) => $p->propA->propB` into a `PropertyPath` object containing the chain `['propA', 'propB']` plus type information.
 
 ```tyhp
 <?tyhp
 
+use Tyhp\PropertyPath;
+
 class User {
-    public string $firstName;
-    public string $lastName;
-    public Address $address;
+    public function __construct(
+        public string $firstName,
+        public Address $address,
+    ) {}
 }
 
 class Address {
-    public string $city;
-    public string $state;
+    public function __construct(
+        public string $city,
+        public string $state,
+    ) {}
 }
 
-class QueryBuilder<T> {
+class ColumnBuilder<T> {
     public function select(PropertyPath<callable(T): string> $prop): static {
-        string $column = $prop->getPropertyName();
-        string $path = $prop->getPath();
+        echo $prop->getPropertyName(), ' | ', $prop->getPath(), ' | ', \implode(',', $prop->getSegments()), "\n";
         return $this;
     }
 }
 
-$query = new QueryBuilder<User>();
+$columns = new ColumnBuilder<User>();
 
 // Single property
-$query->select(fn ($u) => $u->firstName);
-// path: ['firstName'], getPropertyName(): 'firstName', getPath(): 'firstName'
+$columns->select(fn ($u) => $u->firstName);
 
 // Chained property access
-$query->select(fn ($u) => $u->address->city);
-// path: ['address', 'city'], getPropertyName(): 'city', getPath(): 'address.city'
+$columns->select(fn ($u) => $u->address->city);
+```
+
+Output:
+
+```text
+firstName | firstName | firstName
+city | address.city | address,city
 ```
 
 ## PropertyPath Members
 
-The constructor takes `$sourceType` and `$resultType` as strings and passes them to the parent `Expression`. PropertyPath itself does **not** expose `$sourceType` / `$resultType` properties. The parent stores the result type as `$returnType`. PropertyPath adds `readonly array<string> $path`.
+`PropertyPath` extends `Expression`, so it has every `Expression` member listed [below](#expression-members) as well as the members here. The constructor takes `$sourceType` and `$resultType` as strings and passes them to the parent `Expression`, which stores the result type as `$returnType`.
 
 :::member[readonly array<string> $path]
-The property names in the access chain, in order. For fn (User $u) => $u->address->city, this is ['address', 'city'].
-:::
-
-:::member[readonly \Closure<TCallableShape> $callable]
-The compiled closure that can execute the property access. This allows PropertyPath to be used as a callable fallback.
+The property names in the access chain, in order. For `fn (User $u) => $u->address->city`, this is `['address', 'city']`.
 :::
 
 :::member[getPropertyName(): string]
-Returns the final property name (last element of the path). For fn (User $u) => $u->address->city, returns 'city'.
+Returns the final property name (last element of the path). For `fn (User $u) => $u->address->city`, returns `'city'`.
 :::
 
 :::member[getPath(): string]
-Returns the full dot-notation path string. For fn (User $u) => $u->address->city, returns 'address.city'.
+Returns the full dot-notation path string. For `fn (User $u) => $u->address->city`, returns `'address.city'`.
 :::
 
-:::member[getSegments(): array]
+:::member[getSegments(): array<string>]
 Returns the path as an array of property names.
 :::
 
 :::member[getValue(mixed $source): __CallableReturnType<TCallableShape>]
-Executes the property access chain on an object instance. Equivalent to calling the compiled callable.
+Reads the property chain from `$source` and returns the value. For a null-safe chain, a `null` link yields `null`.
 :::
 
 ## PropertyPath Compiled PHP Output
 
-When you pass an fn expression to a PropertyPath parameter, the compiler emits a new \Tyhp\PropertyPath(...) construction. The original fn is included as the callable parameter so the PropertyPath can be executed directly.
+When you pass an `fn` expression to a `PropertyPath` parameter, the compiler emits a `\Tyhp\PropertyPath` construction. The original `fn` is included as the callable argument so the path can be executed directly.
 
 ```tyhp
 <?tyhp
 
-$query->select(fn ($u) => $u->address->city);
+$columns->select(fn ($u) => $u->address->city);
 ```
 
 ```php
 <?php
 
-$query->select(new \Tyhp\PropertyPath(
-    \App\Models\User::class,
+$columns->select(\Tyhp\Generic::bind(\Tyhp\PropertyPath::class, null)(
+    \User::class,
     'string',
     ['address', 'city'],
-    fn (\App\Models\User $u) => $u->address->city
+    fn(\User $u): string => $u->address->city
 ));
 ```
 
 ## Nullable Property Chains
 
-PropertyPath supports null-safe property access. Nullable chains are allowed and the PropertyPath tracks which segments are nullable. The result type is adjusted accordingly.
+`PropertyPath` supports null-safe property access. Nullable chains are allowed, and the path records which links used `?->`.
 
 ```tyhp
 <?tyhp
 
 class User {
-    public ?Address $address;
+    public function __construct(
+        public ?Address $billing = null,
+    ) {}
 }
 
-// Nullable chain — result type is ?string
-$query->select(fn ($u) => $u?->address?->city);
+class ColumnBuilder<T> {
+    public function selectMaybe(PropertyPath<callable(T): ?string> $prop): static {
+        echo $prop->getPath(), "\n";
+        return $this;
+    }
+}
+
+$columns = new ColumnBuilder<User>();
+
+// Nullable chain — the result type is ?string
+$columns->selectMaybe(fn ($u) => $u->billing?->city);
 ```
 
-The emitted construction records which segments used `?->`, so the expression tree contains
-`NullSafeAccessExpression` nodes for them rather than plain property access:
+Output:
+
+```text
+billing.city
+```
+
+The emitted construction passes `nullSafeFlags`, which records whether each link used `?->`. The expression tree then contains `NullSafeAccessExpression` nodes for those links rather than plain property access:
 
 ```php
 <?php
 
-$query->select(new \Tyhp\PropertyPath(
-    \App\Models\User::class,
+$columns->selectMaybe(\Tyhp\Generic::bind(\Tyhp\PropertyPath::class, null)(
+    \User::class,
     '?string',
-    ['address', 'city'],
-    fn (\App\Models\User $u): ?string => $u?->address?->city,
-    nullSafeFlags: [true, true]
+    ['billing', 'city'],
+    fn(\User $u): ?string => $u->billing?->city,
+    nullSafeFlags: [false, true]
 ));
+```
+
+`getValue()` returns `null` when a null-safe link is `null`:
+
+```tyhp
+<?tyhp
+
+function readMaybe(User $user, PropertyPath<callable(User): ?string> $path): void {
+    $value = $path->getValue($user);
+    echo $value ?? 'null', "\n";
+}
+
+readMaybe($ada, fn ($u) => $u->billing?->city);   // Ada has no billing address
+readMaybe($ada, fn ($u) => $u->address->city);
+```
+
+Output:
+
+```text
+null
+Oslo
 ```
 
 ## Expression<callable(T): R> — Full Expression Trees
@@ -138,117 +182,161 @@ $query->select(new \Tyhp\PropertyPath(
 ```tyhp
 <?tyhp
 
+use Tyhp\Expression;
+
 class QueryBuilder<T> {
     public function where(Expression<callable(T): bool> $predicate): static {
-        // Walk the expression tree to build SQL WHERE clause
+        echo $predicate->body->nodeType, ' ', $predicate->returnType, "\n";
         return $this;
     }
 
-    public function select<R>(Expression<callable(T): R> $selector): QueryBuilder<R> {
-        // Walk the expression tree to build SQL SELECT clause
-        return new QueryBuilder<R>();
+    public function select(Expression<callable(T): string> $selector): static {
+        echo $selector->body->nodeType, ' ', $selector->returnType, "\n";
+        return $this;
     }
 }
 
 int $minAge = 18;
 
-$query = new QueryBuilder<User>()
-    ->where(fn ($u) => $u->age > $minAge && $u->isActive)
-    ->select(fn ($u) => $u->firstName);
-
-// The fn expressions are automatically converted to Expression trees
-// because the parameter types are Expression<callable(T): R>
+$query = new QueryBuilder<User>();
+$query->where(fn ($u) => $u->age > $minAge && $u->isActive);
+$query->where(fn ($u) => $u->getFullName() === 'Ada Lovelace');
+$query->select(fn ($u) => $u->firstName);
 ```
 
-## Expression Members
+The `fn` expressions are converted to `Expression` trees because the parameter types are `Expression<callable(T): R>`.
+
+Output:
+
+```text
+binary bool
+binary bool
+propertyAccess string
+```
+
+### Expression Members
 
 :::member[readonly ExpressionNode $body]
-The expression tree root node representing the fn body.
+The expression tree root node representing the `fn` body.
 :::
 
-:::member[readonly array $parameters]
-The lambda parameters as ParameterExpression nodes.
+:::member[readonly array<ParameterExpression> $parameters]
+The lambda parameters as `ParameterExpression` nodes.
 :::
 
 :::member[readonly \Closure<TCallableShape> $callable]
-The compiled closure for execution. Every Expression carries its original compiled closure so it can be executed as a fallback.
+The compiled closure for execution. Every `Expression` carries its original compiled closure so it can be executed directly.
 :::
 
 :::member[readonly string $returnType]
-The resolved return type of the expression.
+The resolved return type of the expression, as a type string.
 :::
 
 :::member[mixed $lastResult]
-The last value produced by `__invoke` or `PropertyPath::getValue`. Stashed before the return-type check so callers who catch `IncompatibleTypeException` can inspect the mismatched value.
+The last value produced by `__invoke` or `PropertyPath::getValue`.
 :::
 
-:::member[__invoke(...): __CallableReturnType<TCallableShape>]
-Execute the expression by delegating to the stored callable. This makes Expression callable via $expr($arg).
+:::member[__invoke(__CallableParametersRest<TCallableShape> ...$args): __CallableReturnType<TCallableShape>]
+Executes the expression by delegating to the stored callable. This makes an `Expression` callable via `$expr($arg)`.
 :::
 
 :::member[compile(): \Closure<TCallableShape>]
 Returns the stored compiled closure.
 :::
 
+:::member[equals(\Tyhp\Expression $other): bool]
+Structural equality; see [Expression Serialization](#expression-serialization).
+:::
+
+### Expression Builders
+
+`Expression` also offers static helpers for building predicates without an inline `fn`:
+
+:::member[static of<T extends object>(__ClassName<T> $sourceType, string|array ...$segments): \Tyhp\PropertyPathBuilder<T>]
+Starts a fluent property-path builder for the property chain `$segments` of `$sourceType`.
+:::
+
+:::member[and(?\Tyhp\Expression<TCallableShape> $other = null): \Tyhp\Expression]
+Combines this predicate with `$other` using `&&`. Without an argument, it starts a fluent continuation.
+:::
+
+:::member[or(?\Tyhp\Expression<TCallableShape> $other = null): \Tyhp\Expression]
+Combines this predicate with `$other` using `||`. Without an argument, it starts a fluent continuation.
+:::
+
+:::member[static andAll(\Tyhp\Expression<callable(mixed): bool> $first, \Tyhp\Expression<callable(mixed): bool> $second, \Tyhp\Expression<callable(mixed): bool> ...$rest): \Tyhp\Expression<callable(mixed): bool>]
+Combines two or more predicates with `&&`.
+:::
+
+:::member[static orAll(\Tyhp\Expression<callable(mixed): bool> $first, \Tyhp\Expression<callable(mixed): bool> $second, \Tyhp\Expression<callable(mixed): bool> ...$rest): \Tyhp\Expression<callable(mixed): bool>]
+Combines two or more predicates with `||`.
+:::
+
+`andAll` and `orAll` take `Expression<callable(mixed): bool>` arguments. See [tyhp/lambda](package_lambda.md) for how they combine predicates and for the complete member reference.
+
 ## Expression Node Types
 
-Expression trees are built from a hierarchy of node types. Every node extends ExpressionNode and carries a resolved type string and a nodeType identifier. The following table lists all supported node types.
+Expression trees are built from a hierarchy of node types. Every node extends `ExpressionNode` and carries a `type` string and a `nodeType` identifier. The `type` string is the node's resolved type; for a literal it is the literal's type (for example `'int'`, `'string'`, or `'18'`).
 
 :::member[ParameterExpression]
-Represents the lambda parameter ($x). Properties: string $name, string $paramType, int $index.
+Represents a lambda parameter (`$x`). Properties: `string $name`, `string $paramType`, `int $index`. `nodeType`: `parameter`.
 :::
 
 :::member[PropertyAccessExpression]
-Represents a property access ($x->firstName). Properties: ExpressionNode $object, string $property.
+Represents a property access (`$x->firstName`). Properties: `ExpressionNode $object`, `string $property`. `nodeType`: `propertyAccess`.
 :::
 
 :::member[NullSafeAccessExpression]
-Represents a null-safe property access ($x?->address). Properties: ExpressionNode $object, string $property.
+Represents a null-safe property access (`$x?->address`). Properties: `ExpressionNode $object`, `string $property`. `nodeType`: `nullSafeAccess`.
 :::
 
 :::member[MethodCallExpression]
-Represents a method call ($x->getFullName()). Properties: ExpressionNode $object, string $method, array $arguments.
+Represents a method call (`$x->getFullName()`). Properties: `ExpressionNode $object`, `string $method`, `array<ExpressionNode> $arguments`. `nodeType`: `methodCall`.
 :::
 
 :::member[StaticMethodCallExpression]
-Represents a static method call (Str::lower(...)). Properties: string $class, string $method, array $arguments.
+Represents a static method call (`Str::lower(...)`). Properties: `string $class`, `string $method`, `array<ExpressionNode> $arguments`. `nodeType`: `staticMethodCall`.
 :::
 
 :::member[BinaryExpression]
-Represents a binary operation ($x->age > 18). Properties: ExpressionNode $left, string $operator, ExpressionNode $right.
+Represents a binary operation (`$x->age > 18`). Properties: `ExpressionNode $left`, `string $operator`, `ExpressionNode $right`. `nodeType`: `binary`.
 :::
 
 :::member[UnaryExpression]
-Represents a unary operation (!$x->isDeleted). Properties: string $operator, ExpressionNode $operand, bool $isPrefix.
+Represents a unary operation (`!$x->isDeleted`). Properties: `string $operator`, `ExpressionNode $operand`, `bool $isPrefix`. `nodeType`: `unary`.
 :::
 
 :::member[ConstantExpression]
-Represents a literal value (18, 'hello') or a captured variable from the enclosing scope. Properties: mixed $value.
+Represents a literal value (`18`, `'hello'`, `true`, `null`), a class constant (`User::ADULT_AGE`), or a captured variable from the enclosing scope. Properties: `mixed $value`. `nodeType`: `constant`.
 :::
 
 :::member[TernaryExpression]
-Represents a ternary expression ($x->a ? $x->b : $x->c). Properties: ExpressionNode $condition, ?ExpressionNode $ifTrue, ExpressionNode $ifFalse.
+Represents a ternary expression (`$x->a ? $x->b : $x->c`). For the short form `$x->a ?: $x->c`, `$ifTrue` is `null`. Properties: `ExpressionNode $condition`, `?ExpressionNode $ifTrue`, `ExpressionNode $ifFalse`. `nodeType`: `ternary`.
 :::
 
 :::member[CoalesceExpression]
-Represents a null coalescing expression ($x->nickname ?? $x->name). Properties: ExpressionNode $left, ExpressionNode $right.
+Represents a null coalescing expression (`$x->nickname ?? $x->name`). Properties: `ExpressionNode $left`, `ExpressionNode $right`. `nodeType`: `coalesce`.
 :::
 
 :::member[ArrayAccessExpression]
-Represents an array access ($x->tags[0]). Properties: ExpressionNode $array, ExpressionNode $index.
+Represents an array access (`$x->tags[0]`). Properties: `ExpressionNode $array`, `ExpressionNode $index`. `nodeType`: `arrayAccess`.
 :::
 
 :::member[CastExpression]
-Represents a type cast ((int) $x->value). Properties: string $targetType, ExpressionNode $operand.
+Represents a type cast (`(string) $x->value`). Properties: `string $targetType`, `ExpressionNode $operand`. `nodeType`: `cast`.
 :::
 
 :::member[NewExpression]
-Represents a new expression (new Money($x->amount)). Properties: string $class, array $arguments.
+Represents a `new` expression (`new Money($x->amount)`). Properties: `string $class`, `array<ExpressionNode> $arguments`. `nodeType`: `new`.
+:::
+
+:::member[InstanceofExpression]
+Represents an `instanceof` or `is` check (`$x->value is int`, `$x instanceof Address`). Properties: `ExpressionNode $operand`, `string $targetType`. `nodeType`: `instanceof`.
 :::
 
 ## Expression Tree Compiled PHP Output
 
-When you pass an fn expression to an Expression<callable(T): R> parameter, the compiler emits a tree of \Tyhp\Expression\*Expression node constructors wrapped in a \Tyhp\Expression. The tree is built bottom-up: leaf nodes first, then their parents.
+When you pass an `fn` expression to an `Expression<callable(T): R>` parameter, the compiler emits node constructors wrapped in a `\Tyhp\Expression`. The tree is built bottom-up: leaf nodes first, then their parents. Node constructors take their members positionally, with the node's `type` string last; the `Expression` itself takes `body`, `parameters`, `callable`, and `returnType`.
 
 ```tyhp
 <?tyhp
@@ -260,21 +348,19 @@ $query->where(fn ($u) => $u->age > $minAge);
 ```php
 <?php
 
-$query->where(new \Tyhp\Expression(
+$query->where(\Tyhp\Generic::bind(\Tyhp\Expression::class, null)(
     body: new \Tyhp\Expression\BinaryExpression(
-        left: new \Tyhp\Expression\PropertyAccessExpression(
-            object: new \Tyhp\Expression\ParameterExpression('u', \App\Models\User::class, 0),
-            property: 'age',
-            type: 'int'
+        new \Tyhp\Expression\PropertyAccessExpression(
+            new \Tyhp\Expression\ParameterExpression('u', \User::class, 0),
+            'age',
+            'int'
         ),
-        operator: '>',
-        right: new \Tyhp\Expression\ConstantExpression($minAge, 'int'),
-        type: 'bool'
+        '>',
+        new \Tyhp\Expression\ConstantExpression($minAge, 'int'),
+        'bool'
     ),
-    parameters: [
-        new \Tyhp\Expression\ParameterExpression('u', \App\Models\User::class, 0),
-    ],
-    callable: fn (\App\Models\User $u) => $u->age > $minAge,
+    parameters: [new \Tyhp\Expression\ParameterExpression('u', \User::class, 0)],
+    callable: fn(\User $u): bool => $u->age > $minAge,
     returnType: 'bool'
 ));
 ```
@@ -282,30 +368,33 @@ $query->where(new \Tyhp\Expression(
 ```tyhp
 <?tyhp
 
-$query->select(fn ($u) => $u->getFullName());
+$query->where(fn ($u) => $u->getFullName() === 'Ada Lovelace');
 ```
 
 ```php
 <?php
 
-$query->select(new \Tyhp\Expression(
-    body: new \Tyhp\Expression\MethodCallExpression(
-        object: new \Tyhp\Expression\ParameterExpression('u', \App\Models\User::class, 0),
-        method: 'getFullName',
-        arguments: [],
-        type: 'string'
+$query->where(\Tyhp\Generic::bind(\Tyhp\Expression::class, null)(
+    body: new \Tyhp\Expression\BinaryExpression(
+        new \Tyhp\Expression\MethodCallExpression(
+            new \Tyhp\Expression\ParameterExpression('u', \User::class, 0),
+            'getFullName',
+            [],
+            'string'
+        ),
+        '===',
+        new \Tyhp\Expression\ConstantExpression('Ada Lovelace', 'string'),
+        'bool'
     ),
-    parameters: [
-        new \Tyhp\Expression\ParameterExpression('u', \App\Models\User::class, 0),
-    ],
-    callable: fn (\App\Models\User $u) => $u->getFullName(),
-    returnType: 'string'
+    parameters: [new \Tyhp\Expression\ParameterExpression('u', \User::class, 0)],
+    callable: fn(\User $u): bool => $u->getFullName() === 'Ada Lovelace',
+    returnType: 'bool'
 ));
 ```
 
 ## Captured Variables
 
-Variables from the enclosing scope that are referenced in the lambda body become ConstantExpression nodes in the expression tree. Their values are captured at runtime when the expression tree is constructed, not at compile time. This enables patterns where runtime values are embedded in the tree.
+Variables from the enclosing scope that are referenced in the lambda body become `ConstantExpression` nodes in the expression tree. Their values are read when the expression tree is constructed, at runtime. This enables patterns where runtime values are embedded in the tree. A captured variable must be definitely assigned where the `fn` appears (**TYHP4324**).
 
 ```tyhp
 <?tyhp
@@ -328,39 +417,60 @@ $query->where(fn ($u) => $u->age > $minAge && $u->role == $requiredRole);
 
 ## ExpressionVisitor
 
-The ExpressionVisitor abstract class provides a visitor pattern for walking expression trees. Library authors extend ExpressionVisitor to build SQL translators, serialization mappers, validation rule generators, and other domain-specific interpreters.
+The `ExpressionVisitor` abstract class provides a visitor pattern for walking expression trees. Library authors extend `ExpressionVisitor` to build SQL translators, serialization mappers, validation rule generators, and other domain-specific interpreters. `visit()` returns `mixed`, so a translator that composes strings narrows each result before using it.
 
 ```tyhp
 <?tyhp
 
-use \Tyhp\Expression\ExpressionVisitor;
-use \Tyhp\Expression\BinaryExpression;
-use \Tyhp\Expression\PropertyAccessExpression;
-use \Tyhp\Expression\ConstantExpression;
+use Tyhp\Expression\BinaryExpression;
+use Tyhp\Expression\ConstantExpression;
+use Tyhp\Expression\ExpressionNode;
+use Tyhp\Expression\ExpressionVisitor;
+use Tyhp\Expression\PropertyAccessExpression;
 
 class SqlWhereVisitor extends ExpressionVisitor {
-    public function visitBinary(BinaryExpression $node): string {
-        string $left = $this->visit($node->left);
-        string $right = $this->visit($node->right);
+    public function visitBinary(BinaryExpression $node): mixed {
+        string $left = $this->sql($node->left);
+        string $right = $this->sql($node->right);
         return "{$left} {$node->operator} {$right}";
     }
 
-    public function visitPropertyAccess(PropertyAccessExpression $node): string {
+    public function visitPropertyAccess(PropertyAccessExpression $node): mixed {
         return $node->property;
     }
 
-    public function visitConstant(ConstantExpression $node): string {
-        if ($node->type === 'string') {
-            return "'" . \addslashes((string)$node->value) . "'";
+    public function visitConstant(ConstantExpression $node): mixed {
+        if ($node->value is string) {
+            return "'" . \addslashes($node->value) . "'";
         }
-        return (string) $node->value;
+        return \var_export($node->value, true);
+    }
+
+    private function sql(ExpressionNode $node): string {
+        mixed $result = $this->visit($node);
+        return $result is string ? $result : '?';
     }
 }
 
-// Usage
-$visitor = new SqlWhereVisitor();
-string $sql = $visitor->visit($expression->body);
-// Result: "age > 18"
+class VisitQuery<T> {
+    public function where(Expression<callable(T): bool> $predicate): string {
+        $visitor = new SqlWhereVisitor();
+        $sql = $visitor->visit($predicate->body);
+        return $sql is string ? $sql : '';
+    }
+}
+
+int $minAge = 18;
+
+echo (new VisitQuery<User>())->where(fn ($u) => $u->age > $minAge), "\n";
+echo (new VisitQuery<User>())->where(fn ($u) => $u->firstName === 'Ada'), "\n";
+```
+
+Output:
+
+```text
+age > 18
+firstName === 'Ada'
 ```
 
 ## Multi-Parameter Expressions
@@ -372,121 +482,181 @@ Expression trees support multi-parameter lambdas for comparison-style expression
 
 class SortableList<T> {
     public function sortBy(Expression<callable(T, T): int> $comparator): static {
-        // Walk the expression tree to determine sort columns
+        echo \count($comparator->parameters), ' ', $comparator->parameters[0]->name, ' ', $comparator->parameters[1]->name, "\n";
         return $this;
     }
 }
 
-$list->sortBy(fn ($a, $b) => $a->lastName <=> $b->lastName);
+(new SortableList<User>())->sortBy(fn ($a, $b) => $a->lastName <=> $b->lastName);
 // The Expression tree has two ParameterExpression nodes
+```
+
+Output:
+
+```text
+2 a b
 ```
 
 ## nameof Integration
 
-The nameof compile-time function works with PropertyPath-style arrow functions for lightweight, refactoring-safe property name extraction. nameof always returns the **last** segment of the chain (C# convention). Use PropertyPath when the full chain is needed.
+The `nameof` compile-time function accepts a property-chain arrow function for lightweight, refactoring-safe property name extraction. `nameof` always returns the **last** segment of the chain. Use `PropertyPath` when the full chain is needed.
 
 ```tyhp
 <?tyhp
 
-// These are equivalent:
-string $col1 = nameof(fn (User $u) => $u->firstName);   // 'firstName'
-string $col2 = nameof(User::$firstName);                 // 'firstName'
+string $col = nameof(fn (User $u) => $u->firstName);       // 'firstName'
 
 // Nested paths still yield the last segment:
-string $city = nameof(fn (User $u) => $u->address->city); // 'city'
+string $city = nameof(fn (User $u) => $u->address->city);  // 'city'
 ```
 
 ## Expression Serialization
 
-Expression trees can be serialized to JSON using ExpressionSerializer. This enables passing expression trees across API boundaries, such as client-side query building sent to a server.
+Expression trees can be serialized to JSON using `ExpressionSerializer`. This enables passing expression trees across API boundaries, such as client-side query building sent to a server. The JSON object has `parameters`, `returnType`, and `body` keys.
 
 ```tyhp
 <?tyhp
 
-use \Tyhp\Expression\ExpressionSerializer;
+use Tyhp\Expression;
+use Tyhp\Expression\ExpressionSerializer;
 
-Expression<callable(User $u): bool> $expr = fn ($u) => $u->age > 18;
+Expression<callable(User): bool> $expr = fn ($u) => $u->age > 18;
 string $json = ExpressionSerializer::toJson($expr);
-
-// Result wraps { parameters, returnType, body }.
-// The `{ "nodeType": "binary", ... }` object is the **body** only:
-// {
-//   "parameters": [ { "name": "u", "index": 0, "type": "..." } ],
-//   "returnType": "bool",
-//   "body": {
-//     "nodeType": "binary",
-//     "operator": ">",
-//     "left": { "nodeType": "propertyAccess", "property": "age", ... },
-//     "right": { "nodeType": "constant", "value": 18, "type": "int" }
-//   }
-// }
+echo $json, "\n";
 
 // Structural equality ignores the compiled closures — two independently
 // constructed trees with the same shape compare equal.
 bool $same = ExpressionSerializer::equals($expr, $expr);
 bool $alsoSame = $expr->equals($expr);
+echo $same ? 'true' : 'false', ' ', $alsoSame ? 'true' : 'false', "\n";
+```
+
+Output:
+
+```text
+{
+    "parameters": [
+        {
+            "name": "u",
+            "index": 0,
+            "type": "User"
+        }
+    ],
+    "returnType": "bool",
+    "body": {
+        "nodeType": "binary",
+        "type": "bool",
+        "operator": ">",
+        "left": {
+            "nodeType": "propertyAccess",
+            "type": "int",
+            "property": "age",
+            "object": {
+                "nodeType": "parameter",
+                "type": "User",
+                "name": "u",
+                "index": 0
+            }
+        },
+        "right": {
+            "nodeType": "constant",
+            "type": "18",
+            "value": 18
+        }
+    }
+}
+true true
 ```
 
 ## Type System Integration
 
 Expression trees integrate with the type system as follows:
 
-- Expression<callable(T): R> is assignable to callable(T): R (via __invoke). You can call an Expression directly: $expr($userInstance). `compile()` returns `\Closure<callable(T): R>`.
-- Expression<callable(T): R> is NOT assignable to \Closure. PHP's \Closure class is final and cannot be extended.
-- PropertyPath<callable(T): R> is a subtype of Expression<callable(T): R>. Code accepting Expression also accepts PropertyPath.
-- When passing Expression where \Closure is expected, the emitter automatically extracts $expression->callable.
-- When passing a regular fn expression to a callable or \Closure parameter (not Expression), the compiler emits a normal closure — no expression tree.
-- The parameter type drives the behavior: only Expression<> and PropertyPath<> parameters trigger expression tree generation.
+- `Expression<callable(T): R>` is callable: `$expr($userInstance)` runs the stored closure. `compile()` returns `\Closure<callable(T): R>`.
+- An `Expression` can be passed to a PHP function parameter declared `callable`, such as `\array_filter($items, $expr)`.
+- An `Expression<callable(T): R>` value can be passed to a `callable(T): R` parameter with the same shape. A `\Closure` parameter accepts any `Expression`-typed argument: the compiler passes its `->callable`, whether the argument is a variable (annotated or inferred) or a call result.
+- When a parameter is declared `Expression<callable(T): R>` and you pass an inline `fn`, a generic `R` is inferred from the `fn` body, for example `function select<R>(Expression<callable(Person): R> $selector): R`.
+- `PropertyPath<callable(T): R>` is a subtype of `Expression<callable(T): R>`. Code accepting `Expression` also accepts `PropertyPath`.
+- An `Expression` value passed to an `Expression` parameter must have the same callable shape; otherwise the argument is rejected with **TYHP4010**.
+- When passing a regular `fn` expression to a `callable` or `\Closure` parameter (not `Expression`), the compiler emits a normal closure — no expression tree.
+- The parameter type drives the behavior: only `Expression<>` and `PropertyPath<>` parameters trigger expression tree generation.
 
 ## Supported Expression Types
 
-The following expression types are supported inside fn expressions that target Expression<callable(T): R> parameters:
+The following expressions are supported inside `fn` expressions that target `Expression<callable(T): R>` parameters:
 
-- Property access: $x->prop
-- Null-safe property access: $x?->prop
-- Method calls: $x->method()
-- Static method calls: Class::method()
-- Binary operators: +, -, *, /, %, ., ==, !=, ===, !==, <, >, <=, >=, <=>, &&, ||, and, or, ??, **
-- Unary operators: !, -, +, ~
-- Constants and literals: int, float, string, bool, null
-- Class constants: Class::CONST
+- Property access: `$x->prop`
+- Null-safe property access: `$x?->prop`
+- Method calls: `$x->method(...)`
+- Static method calls: `Class::method(...)`
+- Binary operators:
+  - arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
+  - string concatenation: `.`
+  - comparison: `==`, `!=`, `===`, `!==`, `<`, `>`, `<=`, `>=`, `<=>`
+  - logical: `&&`, `||`, `and`, `or`, `xor`
+  - bitwise and shift: `&`, `|`, `^`, `<<`, `>>`
+- Unary operators: `!`, `-`, `+`, `~`
+- Literals: `int`, `float`, string literals without interpolation, `true`, `false`, `null` (in any case)
+- Class constants: `Class::CONST`, and `Class::class`
 - Captured variables from the enclosing scope
-- Array access: $x->items[$i]
-- Ternary: $x ? $y : $z
-- Null coalescing: $x ?? $y
-- Type casts: (int) $x->value
-- new expressions: new Money($x->amount)
-- instanceof / is checks: $x->value is int, $x->value instanceof Address
+- Array access: `$x->items[$i]`
+- Ternary and short ternary: `$x ? $y : $z`, `$x ?: $y`
+- Null coalescing: `$x ?? $y` (a `CoalesceExpression`)
+- Type casts: `(string) $x->value`
+- `new` expressions: `new Money($x->amount)`
+- `instanceof` and `is` checks: `$x->value is int`, `$x instanceof Address`
+- Parenthesized sub-expressions
 
 ## Unsupported Expression Types
 
-The following expression types produce a compiler error (CheckerExpressionUnsupportedNode / TYHP4322) when used inside a parsable fn expression:
+The following expressions produce **TYHP4322** — "Expression trees do not support `<kind>` expressions; simplify the fn body" — when used inside a parsable `fn` expression. The kind appears in the message:
 
-- Assignments ($x = ...)
-- await expressions
-- yield / yield from
-- match expressions
-- throw expressions
-- include / require
-- eval
-- Nested fn / function expressions
-- Null-safe method calls ($x?->method()) — property `?->` is supported; method form is not yet
-- Statement-body constructs (if/else, for, while, etc.)
-- print / echo
+| Expression | Kind in the message |
+| --- | --- |
+| Function calls: `\strlen($x->name)`, `$callback($x)` | `function call` |
+| Assignments, compound assignments (`+=`, `??=`), and destructuring | `assignment` |
+| Increment and decrement: `$x->age++`, `--$x->age` | `increment` |
+| String interpolation: `"hi {$x->name}"` | `string interpolation` |
+| `match` expressions | `match` |
+| `throw` expressions | `throw` |
+| `await` expressions | `await` |
+| `yield` expressions | `yield` |
+| Nested `fn` or `function` expressions | `nested fn` |
+| Null-safe method calls: `$x?->method()` (property `?->` is supported) | `nullsafe method call` |
+| `clone` | `clone` |
+| `include` / `require` | `include` |
+| `\|>` pipe | `pipe` |
+| `new class { ... }` | `anonymous class` |
+| `@` error suppression | `error suppression` |
+| Dynamic member names: `$x->{$name}` | `dynamic member` |
+| Array literals: `[1, 2]`, `[...$x]` | `array literal` |
+| First-class callables: `$x->name(...)`, `strlen(...)` | `first-class callable` |
+| Shell commands: `` `ls` `` | `shell command` |
+| `isset($x->name)` | `isset` |
+| `empty($x->name)` | `empty` |
+| `nameof(...)` | `nameof` |
+| `print` | `print` |
+| `exit` | `exit` |
+
+Any other construct that has no tree form is reported by name too, spelled in lower-case words.
+
+A `fn` body is a single expression. A block body, such as `fn ($x) => { return true; }`, is a syntax error.
 
 ## Library Author Guide: Type-Safe Query Builder
 
-This complete example demonstrates how a library author consumes expression trees to build type-safe SQL queries. The query builder accepts Expression parameters and uses an ExpressionVisitor to translate the expression tree to SQL.
+This example demonstrates how a library author consumes expression trees to build type-safe queries. The query builder accepts `Expression` parameters for conditions and `PropertyPath` parameters for column references.
 
 ```tyhp
 <?tyhp
 
-use \Tyhp\Expression;
-use \Tyhp\PropertyPath;
+use Tyhp\Expression;
+use Tyhp\PropertyPath;
 
-class QueryBuilder<T> {
+class UserQuery<T> {
+    /** @var array<Expression<callable(T): bool>> */
     private array $conditions = [];
     private ?string $selectColumn = null;
+    private ?string $orderColumn = null;
 
     public function where(Expression<callable(T): bool> $predicate): static {
         $this->conditions[] = $predicate;
@@ -499,87 +669,104 @@ class QueryBuilder<T> {
     }
 
     public function orderBy<R>(PropertyPath<callable(T): R> $prop): static {
-        // Use $prop->getPropertyName() for the ORDER BY clause
+        $this->orderColumn = $prop->getPropertyName();
         return $this;
+    }
+
+    public function describe(): string {
+        return \count($this->conditions) . ' condition(s), select ' . ($this->selectColumn ?? '*') . ', order by ' . ($this->orderColumn ?? '-');
     }
 }
 
 // User code — fully type-safe, refactoring-safe
 int $minAge = 18;
 
-$users = new QueryBuilder<User>()
+$people = (new UserQuery<User>())
     ->where(fn ($u) => $u->age > $minAge && $u->isActive)
     ->select(fn ($u) => $u->firstName)
     ->orderBy(fn ($u) => $u->lastName);
+echo $people->describe(), "\n";
+```
 
-// The query builder can translate these expression trees to:
-// SELECT first_name FROM users WHERE age > 18 AND is_active = true ORDER BY last_name
+Output:
+
+```text
+1 condition(s), select firstName, order by lastName
 ```
 
 ## Using Expression as a Callable
 
-Every Expression carries its compiled closure, so it can be called directly. This allows code that receives an Expression to either inspect the tree or just execute it.
+Every `Expression` carries its compiled closure, so it can be called directly. This allows code that receives an `Expression` to either inspect the tree or just execute it.
 
 ```tyhp
 <?tyhp
 
+use Tyhp\Expression;
+use Tyhp\Expression\ExpressionNode;
+
 function process(Expression<callable(User): bool> $predicate, User $user): void {
     // Option 1: Inspect the expression tree
     ExpressionNode $body = $predicate->body;
+    echo $body->nodeType, "\n";
 
     // Option 2: Just call it (delegates to the stored closure)
     bool $result = $predicate($user);
+    echo $result ? 'true' : 'false', "\n";
 
     // Option 3: Get the raw closure
-    \Closure $fn = $predicate->compile();
+    \Closure<callable(User): bool> $fn = $predicate->compile();
+    echo $fn($user) ? 'true' : 'false', "\n";
 }
 
-$user = new User('Alice', 25);
-process(fn ($u) => $u->age >= 18, $user);
+process(fn ($u) => $u->age >= 18, $ada);
+```
+
+Output:
+
+```text
+binary
+true
+true
 ```
 
 ## Best Practices
 
 :::tip
-Use PropertyPath<callable(T): R> for simple property references in ORM column mappings, validation, and serialization configuration. It is lightweight and covers the most common use case.
+Use `PropertyPath<callable(T): R>` for simple property references in ORM column mappings, validation, and serialization configuration. It is lightweight and covers the most common use case.
 :::
 
 :::tip
-Use Expression<callable(T): R> when you need to inspect the full structure of a predicate — comparisons, boolean logic, method calls — such as building SQL WHERE clauses or DSL translators.
+Use `Expression<callable(T): R>` when you need to inspect the full structure of a predicate — comparisons, boolean logic, method calls — such as building SQL WHERE clauses or DSL translators.
 :::
 
 :::tip
-Extend ExpressionVisitor to build domain-specific translators rather than manually type-switching on expression node types.
+Extend `ExpressionVisitor` to build domain-specific translators rather than manually type-switching on expression node types.
 :::
 
 :::tip
-Use nameof with PropertyPath expressions for refactoring-safe property name extraction instead of hardcoded strings.
+Use `nameof` with a property-chain `fn` for refactoring-safe property name extraction instead of hardcoded strings.
 :::
 
 :::tip
-Every Expression carries its compiled callable. Design your API to accept Expression<callable(T): R> even if you sometimes just want to execute it — the caller can pass an fn expression and the library can either inspect or call it.
+Every `Expression` carries its compiled callable. Design your API to accept `Expression<callable(T): R>` even if you sometimes just want to execute it — the caller can pass an `fn` expression and the library can either inspect or call it.
 :::
 
 ## Common Mistakes
 
 :::danger
-Don't use parsable lambdas for regular callbacks where you only need to execute the function. Expression trees have construction overhead — use callable or \Closure when you don't need to inspect the tree.
+Don't use parsable lambdas for regular callbacks where you only need to execute the function. Expression trees have construction overhead — use `callable` or `\Closure` when you don't need to inspect the tree.
 :::
 
 :::danger
-Don't pass non-fn arguments to PropertyPath or Expression parameters. Only inline fn expressions are convertible to expression trees. Passing a variable, closure, or callable produces a compiler error.
+Don't pass non-`fn` arguments to `PropertyPath` parameters, or anything other than an inline `fn` or an existing `Expression` value to `Expression` parameters. Passing a variable that holds a plain closure produces **TYHP4320** (for `PropertyPath`) or **TYHP4323** (for `Expression`).
 :::
 
 :::danger
-Don't use complex statements (if/else, loops, match, await) inside parsable fn expressions. Expression trees only support single-expression bodies with the supported node types.
+Don't use unsupported constructs (function calls, assignments, `match`, `await`, string interpolation) inside parsable `fn` expressions. Expression trees only support single-expression bodies made of the node types listed above.
 :::
 
 :::danger
-Don't pass method calls or binary expressions to a PropertyPath parameter — PropertyPath only supports simple property access chains (fn ($x) => $x->a->b). Use Expression for more complex expressions.
-:::
-
-:::danger
-Don't assume Expression<callable(T): R> is assignable to \Closure — PHP's \Closure class is final. The emitter extracts ->callable automatically when needed, but avoid explicit \Closure type hints when you want to accept expression trees.
+Don't pass method calls or binary expressions to a `PropertyPath` parameter — `PropertyPath` only supports simple property access chains (`fn ($x) => $x->a->b`). Use `Expression` for more complex expressions.
 :::
 
 ```tyhp
@@ -593,23 +780,24 @@ function findColumn(PropertyPath<callable(User): string> $prop): string {
 findColumn(fn ($u) => $u->firstName);
 
 // ERROR — not an inline fn expression
-// $myFn = fn ($u) => $u->firstName;
-// findColumn($myFn);  // Compiler error: requires inline fn
+// $myFn = fn (User $u): string => $u->firstName;
+// findColumn($myFn);  // TYHP4320
 
 // ERROR — not a property chain
-// findColumn(fn ($u) => $u->getFullName());  // Compiler error: method call not allowed in PropertyPath
+// findColumn(fn ($u) => $u->getFullName());  // TYHP4321
 
 // OK — use Expression for method calls
 function findExpr(Expression<callable(User): string> $expr): string {
-    return '';
+    return $expr->body->nodeType;
 }
-findExpr(fn ($u) => $u->getFullName());  // This works
+echo findExpr(fn ($u) => $u->getFullName());  // methodCall
 ```
 
 ## Compiler Errors
 
-- TYHP4320: Parameter of type 'PropertyPath<callable(T): R>' requires an inline fn expression — triggered when a non-fn argument is passed to a PropertyPath parameter.
-- TYHP4321: PropertyPath expression must be a simple property access chain — triggered when the fn body contains method calls, operators, or other non-property-access expressions in a PropertyPath context.
-- TYHP4322: Expression trees do not support '{0}' expressions — triggered when an unsupported expression type (assignments, await, yield, match, etc.) is used in an Expression fn body.
-- TYHP4323: Parameter of type 'Expression<callable(T): R>' requires an inline fn expression — triggered when a non-fn argument is passed to an Expression parameter.
-- TYHP4324: Captured variable '${0}' in expression tree must be definitely assigned — triggered when a captured variable may not be initialized at the point of capture.
+- **TYHP4320**: Parameter of type `PropertyPath<callable(T): R>` requires an inline fn expression — reported when a non-`fn` argument, including an `Expression` value, is passed to a `PropertyPath` parameter.
+- **TYHP4321**: `PropertyPath` expression must be a simple property access chain — reported when the `fn` body contains method calls, operators, literals, array access, or other non-property-access expressions in a `PropertyPath` context.
+- **TYHP4322**: Expression trees do not support `<kind>` expressions — reported when an unsupported expression (see the table above) is used in an `Expression` `fn` body.
+- **TYHP4323**: Parameter of type `Expression<callable(T): R>` requires an inline fn expression — reported when an argument that is neither an inline `fn` nor an `Expression` value (a plain closure variable, a `function` closure, `null`) is passed to an `Expression` parameter.
+- **TYHP4324**: Captured variable `$name` in expression tree must be definitely assigned — reported when a captured variable may not be initialized where the `fn` appears.
+- **TYHP4010**: Argument of type `Expression<callable(A): B>` is not assignable to parameter of type `Expression<callable(C): D>` — reported when an `Expression` value of a different callable shape is passed.

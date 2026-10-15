@@ -84,8 +84,9 @@ A type parameter can have both a constraint and a default. The syntax is T exten
 <?tyhp
 
 // Promise defaults TReturn to mixed (runtime tyhp/async)
-// The constraint allows void or mixed (both are valid return types)
-class Promise<TReturn extends void|mixed = mixed> {
+// The constraint allows void or mixed (both are valid return types) as long as the
+// type is already awaited: a Promise<Promise<int>> is rejected.
+class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> {
     private ?TReturn $result = null;
 
     public function resolve(TReturn $value): void {
@@ -247,8 +248,11 @@ create<MyClass>();      // T = MyClass (explicit)
 When calling a generic function or method, the resolution order for each type parameter is strictly defined. Type inference from arguments always takes priority over defaults. Defaults are a last resort for parameters that cannot be determined any other way.
 
 1. Explicit type arguments — provided by the caller (e.g., foo<int>())
-2. Type inference — inferred from argument types at the call site
-3. Defaults — used for parameters that are neither explicitly provided nor inferable
+2. Type inference — inferred from argument types at the call site. Elements of an `array<Box<T>>` or a variadic `Box<T> ...` are merged, so `Box<int>` and `Box<string>` infer `T` as `int|string`.
+3. The expected type of the call — the type of the variable, parameter, or return where the call is used (`Box<int> $box = make()`)
+4. Defaults — used for parameters that are neither explicitly provided, inferred, nor supplied by that expected type
+
+A call that still has an unbound type parameter is an error: specify the type argument explicitly. A union parameter such as `null|T|Box<T>` accepts a union argument only when every member fits one arm after `T` is bound.
 
 ```tyhp
 <?tyhp
@@ -387,9 +391,9 @@ Hand-written tyhpdefs can declare the same generic defaults. Overlay `partial cl
 ```tyhp
 <?tyhpdef
 
-class Promise<TReturn extends void|mixed = mixed> {
-    public static function _async<T extends void|mixed = mixed>(callable(): T $fn): Promise<T>;
-    public static function _await<T>(Promise<T> $promise): T;
+class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> {
+    public static function _async<T extends void|mixed>(callable(): T $fn): self<__Awaited<T>>;
+    public static function _await<T extends __Awaited<void|mixed>>(Promise<T> $promise): __Awaited<T>;
 }
 
 type Collection<T = mixed> = array<T>;
@@ -405,7 +409,7 @@ type Collection<T = mixed> = array<T>;
 ## Best Practices
 
 :::tip
-Use defaults for commonly-used type parameters where there is a clear "common case." For example, `Promise<TReturn extends void|mixed = mixed>` matches the runtime package so omitted `TReturn` is `mixed`.
+Use defaults for commonly-used type parameters where there is a clear "common case." For example, `Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>>` matches the runtime package so omitted `TReturn` is `mixed`.
 :::
 
 :::tip

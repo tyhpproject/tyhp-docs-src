@@ -69,7 +69,7 @@ tyhp generate_tyhpdef --package-path=./vendor/guzzlehttp/guzzle
 tyhp generate_tyhpdef --vendor
 tyhp generate_tyhpdef --source=./lib/**/*.php
 tyhp generate_tyhpdef --validate ./tyhpdef/
-tyhp generate_tyhpdef --audit-stubs=runtime/packages/php/_tyhpdef --out=stub-audit.md
+tyhp generate_tyhpdef --audit-stubs=./tyhpdef --out=stub-audit.md
 ```
 
 Exactly one of `--ext-name`, `--package-path`, `--source`, or `--vendor` is required, except `--validate` or `--audit-stubs` which can run alone.

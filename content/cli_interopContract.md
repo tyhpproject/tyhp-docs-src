@@ -148,7 +148,7 @@ What **survives** is whatever the emitter explicitly lowers into calls on the ru
 
 ## Runtime entry points
 
-FQNs the contract covers. Packages are Composer names under `runtime/packages/`.
+FQNs the contract covers. Packages are identified by their Composer names (`tyhp/core`, `tyhp/async`, `tyhp/lambda`, …).
 
 ### Emitter `RequirePackage` today
 
@@ -162,7 +162,7 @@ Those packages are what the build action can auto-wire into a project’s `compo
 
 ### Required contract surface (all packages)
 
-Even when the emitter does not yet `RequirePackage` a package for every call site, the following FQNs are part of the **written** interop surface (direct calls, future emit, and self-host):
+Even when the emitter does not yet `RequirePackage` a package for every call site, the following FQNs are part of the **written** interop surface (direct calls and future emit):
 
 #### `tyhp/core`
 
@@ -296,8 +296,6 @@ A thin index suite lives under `tests/conformance/story15/` (operators, extensio
 ## Machine-checkable surface
 
 `InteropContractSurface` enumerates emitter-required runtime symbols (the contract surface). Conformance tests assert that each symbol is declared — with the documented namespace and keyword — in the owning package’s committed `package.tyhpdef`. The tyhpdef is the checked source of truth because emitted `src/` PHP is regenerated (and `dist/` is not committed).
-
-Runtime **self-host** (recompile `runtime/packages/*/tyhp_src` and diff against committed PHP) consumes this list once the self-host allowlist is green. Documenting or version-stamping the contract does not wait on that milestone.
 
 :::tip
 When changing emit call patterns, update `OperatorMethodNameGenerator` / `GeneratedNames`, the runtime packages, `InteropContractSurface`, this page, and bump `interopContractVersion` if the change is breaking — in that order of truth: **code helpers → runtime → surface enum → docs → version stamp**.

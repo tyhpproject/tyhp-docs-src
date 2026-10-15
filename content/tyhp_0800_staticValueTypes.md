@@ -101,7 +101,7 @@ type StrictBool = true|false;  // Same as bool
 
 ## Literal Types in Function Overloads
 
-Literal types enable function overloads where different literal argument values produce different return types. The compiler uses the literal type to select the correct overload signature.
+Literal types enable function overloads where different literal argument values produce different return types. The compiler picks the first declared signature whose literal parameter type accepts the argument; a call with a plain `string` argument matches none of the literal signatures and reports TYHP4374 (no signature accepts it, even through implicit conversions). See [Function and Method Overloads](tyhp_1200_functionOverloads.md).
 
 ```tyhp
 <?tyhp

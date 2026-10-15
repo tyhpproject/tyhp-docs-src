@@ -158,6 +158,22 @@
             ]
         },
         {
+            "icon": "fa-box-open",
+            "description": "API reference and guides for each tyhp/* runtime package.",
+            "lastUpdated": "", // leave empty to auto-calculate based on file modification timestamps
+            "section": "Runtime Packages",
+            "items": [
+                "package_intro.md", // overview, dependencies, extensions, choosing a package
+                "package_core.md", // tyhp/core
+                "package_async.md", // tyhp/async
+                "package_decimal.md", // tyhp/decimal
+                "package_lambda.md", // tyhp/lambda
+                "package_io.md", // tyhp/io
+                "package_parallel.md", // tyhp/parallel
+                "package_compiler.md" // tyhp/compiler
+            ]
+        },
+        {
             "icon": "fa-lightbulb",
             "description": "",
             "lastUpdated": "", // leave empty to auto-calculate based on file modification timestamps

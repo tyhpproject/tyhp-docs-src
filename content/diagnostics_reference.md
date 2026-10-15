@@ -378,6 +378,50 @@ Run <code>tyhp --explain TYHP3029</code> for the long-form explanation.
 Run <code>tyhp --explain TYHP3030</code> for the long-form explanation.
 :::
 
+:::member[TYHP3031 (Error)]
+**BinderOverloadMissingImplementation.** Message: <code>Overload signature `{0}` has no implementation; overload signatures must be followed directly by a declaration with a body</code>.
+
+Bodyless signatures of the same function or method name form an overload set only when a declaration with a body follows them directly (interface and `abstract` method sets are the exception: the signatures are the whole set). Add the implementation after the last signature.
+
+```tyhp
+<?tyhp
+function area(int $r): float;
+function area(int $w, int $h): float;
+// Error: no implementation follows. Add:
+// function area(int $a, int $b = 0): float {
+//     return $b === 0 ? 3.14159 * $a * $a : (float) ($a * $b);
+// }
+```
+:::
+
+:::member[TYHP3032 (Error)]
+**BinderOverloadNotAdjacent.** Message: <code>Overload signature `{0}` must be declared directly before its implementation, with no other declarations in between</code>.
+
+Keep the signatures and the implementation of one overload set together, in that order, with nothing declared between them.
+:::
+
+:::member[TYHP3033 (Warning)]
+**BinderOverloadLone.** Message: <code>`{0}` has a single overload signature; declare at least two overloads, or remove it and use the implementation's own signature</code>.
+
+A set with one signature hides the implementation's signature without adding a second call shape.
+:::
+
+:::member[TYHP3034 (Error)]
+**BinderOverloadDuplicate.** Message: <code>Overload signature `{0}` has the same parameters and return type as an earlier overload</code>.
+
+The first matching signature always wins, so an identical later signature can never be selected. Remove it or change its parameter types.
+:::
+
+:::member[TYHP3035 (Error)]
+**BinderOverloadModifierMismatch.** Message: <code>Overload signature `{0}` must use the same modifiers (static, visibility, async, abstract, final) as the rest of its overload set</code>.
+
+Every signature of a method overload set and its implementation share one set of modifiers.
+:::
+
+:::member[TYHP3036 (Error)]
+**BinderOverloadConstructorNotSupported.** Message: <code>Overload signatures are not supported on constructors or destructors (`{0}`); declare separate factory methods or use optional parameters</code>.
+:::
+
 
 ## Checker Errors (TYHP4xxx)
 
@@ -477,6 +521,8 @@ int $count = "hello";
 ```
 
 Make the two types agree: widen or change the declared type, convert the value explicitly, or narrow a nullable or union type with a guard before the assignment.
+
+A generic class written without type arguments is `Box<mixed>` when it is assigned to an instantiation of the same class, so `Box<int> $b = $raw;` with a `Box $raw` reports this error, as do the same assignment through an argument (TYHP4010) or a return (TYHP4009). The reverse direction is fine. See [Generic Types Without Type Arguments](tyhp_0500_generics.md#generic-types-without-type-arguments).
 :::
 
 :::member[TYHP4009 (Error)]
@@ -506,6 +552,8 @@ process("abc");  // Error: Argument of type 'string' not assignable to 'int'
 ```
 
 Fix: Pass a value of the correct type, or cast the argument explicitly.
+
+An implicit [`operator convert`](tyhp_1600_operatorOverloads.md) lets a call pass a convertible argument, but a conversion declared in an extension applies only where the extension is active (the declaring file, a file with `use extension`, or any file once `global use extension` is declared). Elsewhere the same call reports this error. A variable declared `callable(Money): string` and a closure also keep their exact parameter types, so passing a convertible argument to either reports this error.
 :::
 
 :::member[TYHP4011 (Error)]
@@ -724,12 +772,16 @@ A `continue` statement appears outside of a loop construct.
 :::member[TYHP4028 (Error)]
 **CheckerAwaitOutsideAsync.** Message: <code>`await` can only be used inside an async function</code>.
 
-The `await` keyword is used inside a function that is not marked as `async`.
+The `await` keyword, or `using await`, is used inside a function that is not marked as `async`.
 
 ```tyhp
 <?tyhp
 function fetchData(): string {
     return await getRemoteData();  // Error: await outside of async function
+}
+
+function closeAll(): void {
+    using await ($conn = new AsyncConnection()) { }  // Error: using await outside async code
 }
 ```
 
@@ -743,15 +795,18 @@ A binary or unary operator is used with operands whose types do not support that
 :::
 
 :::member[TYHP4030 (Error)]
-**CheckerDisposableRequiresInterface.** Message: <code>Disposable assignment `:=` requires type implementing `IsDisposable`</code>.
+**CheckerDisposableRequiresInterface.** Message: <code>Resource of `:=`, `using` or `using await` requires a type implementing `IsDisposable`</code>.
 
-The disposable assignment operator `:=` is used with a type that does not implement the `IsDisposable` interface.
+The disposable assignment operator `:=`, a `using` block, or a `using await` block is used with a class that implements neither `IsDisposable` nor `AsyncIsDisposable`.
 
 ```tyhp
 <?tyhp
 class PlainObject { }
 $obj := new PlainObject();
 // Error: ':=' requires the type to implement IsDisposable
+
+using (PlainObject $p = new PlainObject()) { }
+// Error: same requirement
 ```
 :::
 
@@ -770,7 +825,7 @@ A function with a type guard return type (`$param is Type`) does not return a bo
 :::member[TYHP4035 (Error)]
 **CheckerGenericConstraintNotSatisfied.** Message: <code>Type `{0}` does not satisfy constraint `{1}`</code>.
 
-A type argument provided for a generic parameter does not meet the declared constraint.
+A type argument provided for a generic parameter does not meet the declared constraint. A `mixed` argument binds the parameter to `mixed`, so it fails any constraint other than `mixed`; narrow the value first.
 
 ```tyhp
 <?tyhp
@@ -1177,6 +1232,8 @@ Run <code>tyhp --explain TYHP4095</code> for the long-form explanation.
 
 :::member[TYHP4096 (Error)]
 **CheckerSpreadNonIterable.** Message: <code>Spread operator requires an iterable type, found `{0}`</code>.
+
+A call argument spread (`f(...$x)`) needs an array or other iterable; a `mixed` value must be narrowed first.
 Run <code>tyhp --explain TYHP4096</code> for the long-form explanation.
 :::
 
@@ -1202,7 +1259,22 @@ Run <code>tyhp --explain TYHP4100</code> for the long-form explanation.
 
 :::member[TYHP4101 (Error)]
 **CheckerSymbolNameNotFound.** Message: <code>Symbol `{0}` is not found for type `{1}`</code>.
-Run <code>tyhp --explain TYHP4101</code> for the long-form explanation.
+
+A property read, method call, or static member access whose receiver type has no such member. This covers instance members of a fully-known class or interface (including bare `object`, which has no members) as well as scalar and other built-in receivers. The error is not reported when the class has a magic accessor (`__get`, `__call`, `__callStatic`), when part of its ancestry is unresolved, or when the member name is dynamic (`$obj->{$name}`).
+
+Inside the branch of `\property_exists($obj, 'name')` or `\method_exists($obj, 'name')` with a literal name, that member is known to exist.
+
+For a scalar or other built-in receiver, or a class, this is also what you see when the method belongs to an extension that is not in scope in the current file. A project-source extension applies in the file that declares it, in files that import it with `use extension`, and everywhere when a file declares it with `global use extension`.
+
+```tyhp
+<?tyhp
+
+// In a file that neither declares nor imports an extension with `shout()` on string:
+string $s = 'c';
+echo $s->shout();   // Error: Symbol `shout` is not found for type `string`
+```
+
+Fix: Add `use extension \Your\Extension;` to the file, or call a method the type has.
 :::
 
 :::member[TYHP4104 (Error)]
@@ -1277,6 +1349,17 @@ Run <code>tyhp --explain TYHP4117</code> for the long-form explanation.
 
 :::member[TYHP4118 (Error)]
 **CheckerOverloadSignatureIncompatible.** Message: <code>Overload signature is not compatible with implementation signature</code>.
+
+Every overload signature must describe calls the implementation accepts: the arity must fit, each parameter type of the signature must be assignable to the implementation's parameter type, and the signature's return type and the implementation's return type must be assignable in at least one direction. An override of an `abstract` overload set is checked against every signature. Widen the implementation's parameter types or align its return type.
+
+```tyhp
+<?tyhp
+function narrow(int $a): int;
+function narrow(string $a): string;
+function narrow(int $a): int {   // the implementation does not accept `string`
+    return $a;
+}
+```
 Run <code>tyhp --explain TYHP4118</code> for the long-form explanation.
 :::
 
@@ -1518,7 +1601,9 @@ Nullable properties (and properties with defaults) remain optional at constructi
 
 `mixed` is Tyhp's strict top type: any value may be assigned to it, but it cannot be used in type-specific operations until narrowed.
 
-Narrow with a type guard (`instanceof` / `is`, `\is_string()`, `\is_int()`, a user-defined `$param is T` guard, or a null check) before member access, calls, indexing, arithmetic, bitwise ops, string concatenation, or similar. Comparison and `instanceof`/`is` themselves are allowed so narrowing remains possible.
+Narrow with a type guard (`instanceof` / `is`, `\is_string()`, `\is_int()`, a user-defined `$param is T` guard, or a null check) before member access (including the receiver of `$m->p ?? 1` and `$m->p ??= 1`), calls, indexing, `$m::class`, array spread (`[...$m]`), arithmetic, bitwise ops, string concatenation, ordering comparisons (`<`, `<=`, `>`, `>=`, `<=>`), or similar. Equality (`==`, `===`, `!=`, `!==`), `??`, casts, and `instanceof`/`is` themselves are allowed so narrowing remains possible.
+
+Guards can be combined: after `\is_int($m) || $m === null`, `$m` is `?int`.
 
 Assignment and return already reject passing `mixed` where a more specific type is required (TYHP4008 / TYHP4009 / TYHP4010).
 :::
@@ -1592,11 +1677,11 @@ Tyhp forbids parameterized `static<...>` in every scope, including `final` class
 
 Late-static binding names the late-bound class; it does not invent or rebind generic type arguments. Type arguments come from the call-site class spelling (`Child<string>::factory()`) or from the receiver/`$this` instantiation for instance methods.
 
-Use: - bare `static` for fluent / LSB returns that should follow the late-bound class - `self<...>` or the declaring class name for factories that stamp method generics onto the class (e.g. `_async<T>(...): self<T>`) - `parent<...>` when an explicit parent instantiation is required
+Use: - bare `static` for fluent / LSB returns that should follow the late-bound class - `self<...>` or the declaring class name for factories that stamp method generics onto the class (e.g. `_async<T>(...): self<__Awaited<T>>`) - `parent<...>` when an explicit parent instantiation is required
 
 ```tyhp
-final class Promise<TReturn extends void|mixed = void> {
-    public static function _async<T extends void|mixed>(callable(): T $fn): self<T> { /* ... */ }
+final class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> {
+    public static function _async<T extends void|mixed>(callable(): T $fn): self<__Awaited<T>> { /* ... */ }
     public function then<TResult>(callable(TReturn): TResult $cb): static { /* ... */ }
 }
 ```
@@ -2016,7 +2101,7 @@ Use only `->` or `?->` property accesses starting at the parameter — `takes(fn
 :::member[TYHP4322 (Error)]
 **CheckerExpressionUnsupportedNode.** Message: <code>Expression trees do not support `{0}` expressions; simplify the fn body</code>.
 
-The inline `fn` body contains an expression kind that cannot be represented in an expression tree. Assignments, `await`, `yield`, `match`, `instanceof`/`is`, nested `fn`/closures, free function calls, `throw`, and similar constructs are rejected so the emitted tree stays a faithful, inspectable data structure.
+The inline `fn` body contains an expression kind that cannot be represented in an expression tree. The message names the construct in words, for example `function call`, `array literal`, `first-class callable`, `shell command`, `string interpolation`, `assignment`, `match`, `nested fn`, `await`, or `isset`. These constructs are rejected so the emitted tree stays a faithful, inspectable data structure. See [Parsable Lambdas and Expression Trees](tyhp_3000_parsableLambdas.md#unsupported-expression-types) for the full list.
 
 ```tyhp
 <?tyhp
@@ -2025,7 +2110,7 @@ function takes(\Tyhp\Expression<callable(User $u): bool> $pred): void {}
 takes(fn ($u) => await $u->load());
 ```
 
-Simplify the body to supported forms: property/method access, operators, casts, ternary/`??`, array access, `new`, literals, and definitely-assigned captures.
+Simplify the body to supported forms: property/method access, operators, casts, ternary/`??`, array access, `new`, `instanceof`/`is`, literals, and definitely-assigned captures.
 :::
 
 :::member[TYHP4323 (Error)]
@@ -2370,6 +2455,116 @@ declare(php=">=8.3") {
 Run <code>tyhp --explain TYHP4372</code> for the long-form explanation.
 :::
 
+:::member[TYHP4373 (Error)]
+**CheckerAwaitedBoundNotSettled.** Message: <code>Type argument `{0}` for `{1}` must be an already-awaited type (not a promise, a union with a promise member, or a type parameter that could hold one, such as an unconstrained one or one bounded by `mixed`); use a settled type, or constrain the type parameter with `extends __Awaited&lt;…&gt;`</code>.
+
+A type parameter declared `T extends __Awaited<…>` holds only a type that is its own awaited type, so `Promise<T>` can never be a promise of a promise. `Promise<Promise<int>>`, `Promise<int|Promise<string>>`, and `Promise<T>` for an unconstrained `T` (or a `T` bounded only by `mixed` or `object`) are rejected, because such a `T` could itself be a promise. `Promise<mixed>` and `Promise<object>` are accepted. Use the settled type (`Promise<int>`), or constrain your own type parameter the same way:
+
+```tyhp
+<?tyhp
+function collect<T extends __Awaited<void|mixed>>(array<Promise<T>> $promises): array<T> {
+    // ...
+}
+```
+:::
+
+:::member[TYHP4374 (Error)]
+**CheckerOverloadNoMatch.** Message: <code>No overload of `{0}` matches this call. Overloads: {1}</code>.
+
+A call to an overloaded function or method must match one of the declared overload signatures; the implementation's own signature is not callable. The first signature, in declaration order, whose parameters accept the arguments as written is used. Only when none does are the signatures tried again with the implicit `operator convert` conversions an ordinary call applies (see TYHP4375). If no signature accepts the arguments even with those conversions, the error lists every signature.
+
+A callable value such as `$fn = describe(...)` is called through the signatures it was created from: `$fn(5)` is accepted when an argument fits a signature as written, or when it is a type that converts implicitly to that signature's parameter at that position (see TYHP4376). Any other argument reports this error, listing the signatures.
+:::
+
+:::member[TYHP4375 (Error)]
+**CheckerOverloadAmbiguous.** Message: <code>The call to `{0}` is ambiguous: no overload accepts the arguments as written, and more than one accepts them only through implicit conversion to different types. Overloads: {1}. Convert an argument explicitly (for example with a cast) to choose one</code>.
+
+When no overload accepts a call as written, the compiler tries the overloads again, allowing the implicit `operator convert` conversions an ordinary call applies (class-owned and extension conversions, and conversion to a scalar such as `int`, unless the conversion is hidden with `operator convert hide`). If several overloads accept the call only through conversion, they are narrowed in two steps:
+
+1. An overload that converts only some of the arguments another overload converts, and converts those to the same types, is preferred over it.
+2. Among the remaining overloads, if they all convert the arguments to the same types, the first declared is used. If they convert to different types, the call is ambiguous.
+
+Convert the argument yourself (for example `new Money(5)`) so that one overload accepts it as written, and the ambiguity disappears.
+
+```tyhp
+<?tyhp
+final class Money {
+    public function __construct(public int $cents) {}
+    operator convert(int $value) { return new self($value); }
+}
+
+final class Meters {
+    public function __construct(public int $value) {}
+    operator convert(int $value) { return new self($value); }
+}
+
+function measure(Money $m): string;
+function measure(Meters $m): string;
+function measure(Money|Meters $a): string {
+    return 'measured';
+}
+
+function run(): void {
+    echo measure(5);             // error: both overloads need a conversion of 5
+    echo measure(new Money(5));  // OK: accepted as written
+}
+```
+:::
+
+:::member[TYHP4376 (Error)]
+**CheckerOverloadCallableAmbiguousConversion.** Message: <code>The first-class callable `{0}(...)` cannot convert a `{1}` argument at position {2}: no overload accepts it as written, and the overloads convert it to different types (`{3}`). Call the overload directly, or pass an argument that one overload accepts</code>.
+
+A first-class callable of an overloaded function or method converts its arguments the way an ordinary call does, one parameter position at a time. At each position:
+
+- A type that some overload accepts as written there is passed as it is.
+- Any other type that converts implicitly to an overload's parameter is converted to it, and the callable accepts that type.
+- A type that would convert to a *different* type in different overloads cannot be converted, because the callable does not know which overload the caller means.
+
+This error reports the third case, at the `(...)` of the first-class callable. Call the overload directly with an argument that one overload accepts, or give the overloads the same parameter type at that position.
+
+```tyhp
+<?tyhp
+final class Money {
+    public function __construct(public int $cents) {}
+    operator convert(int $value) { return new self($value); }
+}
+
+final class Meters {
+    public function __construct(public int $value) {}
+    operator convert(int $value) { return new self($value); }
+}
+
+function measure(Money $m): string;
+function measure(Meters $m): string;
+function measure(Money|Meters $a): string {
+    return 'measured';
+}
+
+$fn = measure(...); // error: an int converts to Money and to Meters
+```
+:::
+
+:::member[TYHP4377 (Error)]
+**CheckerCannotInferTypeArgument.** Message: <code>Cannot infer type argument `{0}` for `{1}`. Specify it explicitly</code>.
+
+A generic call whose type parameter is not fixed by an explicit type argument, by the arguments, or by the type expected at the call (the variable, parameter, or return the call is used as) uses the parameter's declared default. When there is no default either, the call reports this error. Write the type argument explicitly (`make<int>()`).
+
+```tyhp
+<?tyhp
+class Box<T> {
+    public function __construct(public ?T $value = null) {}
+}
+function make<T>(): Box<T> { return new Box<T>(); }
+function makeD<T = int>(): Box<T> { return new Box<T>(); }
+
+function demo(): void {
+    $a = make();            // error: T cannot be inferred
+    Box<int> $b = make();   // T is int, from the variable type
+    Box<int> $c = makeD();  // T is int, the declared default
+}
+```
+:::
+
 :::member[TYHP4500 (Warning)]
 **CheckerDeprecatedUsage.** Message: <code>`{0}` is deprecated{1}</code>.
 
@@ -2502,11 +2697,6 @@ The compiled output needs the TyhpLib runtime (the `tyhp/core` family of package
 Fix: Restore the runtime package reference (Composer `tyhp/core` / `tyhp.json` runtime settings) and rebuild.
 :::
 
-:::member[TYHP5015 (Error)]
-**EmitterStructBackingError.** Message: <code>Configured struct backing class `{0}` is not found</code>.
-Run <code>tyhp --explain TYHP5015</code> for the long-form explanation.
-:::
-
 :::member[TYHP5016 (Error)]
 **EmitterDisposableError.** Message: <code>Disposable variable of type `{0}` does not implement `IsDisposable`</code>.
 Run <code>tyhp --explain TYHP5016</code> for the long-form explanation.
@@ -2625,6 +2815,12 @@ A placeholder in `tyhp.json` could not be expanded during interpolation. Path ke
 `{name}` and `{version}` (and `{projectVersion}`) come from `composer.json` next to `tyhp.json`, not from a file `build.updateComposer` may write under `output.publishPath`. `{version.suffix}` is everything after the numeric patch and is empty when omitted. `{type}` is the tyhp.json project kind. `{composer.type}` is Composer's `type`. `{phpVersion.id}` is the Tyhp PHP id for `output.phpVersion` (`8.2` → `802`). `{env.NAME}` reads a process environment variable; it is an error if that variable is unset.
 
 File variables (`{fileName}`, `{fileStem}`, `{extension}`, `{recursiveDir}`, `{relativePath}`) are only valid in `output.publishContent` `dst`, and expand after glob matching. `{extension}`, `{fileStem}`, and `{recursiveDir}` may be empty. Use `{{` and `}}` for a literal brace. `tyhp init` does not write `version` into `composer.json`; add that field before using `{version}`.
+:::
+
+:::member[TYHP6010 (Warning)]
+**ConfigStructBackingIgnored.** Message: <code>`build.structBacking` is `{0}`; structs are always PHP arrays, so the setting is ignored. Remove it from tyhp.json</code>.
+
+`tyhp.json` sets `build.structBacking` to a value other than `"array"`. Structs always compile to plain PHP associative arrays, so the build ignores the value. Delete the `build.structBacking` entry (or leave it as `"array"`).
 :::
 
 

@@ -165,7 +165,7 @@ validate('email', $emailInput);
 
 ## `typeof(Type)`
 
-Returns a `\Tyhp\Type` instance for a type expression. Scalars emit `\Tyhp\Type::int()` / `::string()` / etc. Declared classes emit `\Tyhp\Type::fromClassName(...)`. Structs emit `\Tyhp\Type::struct(...)` with the property schema. Source type aliases emit a factory call (`UserId()`, `Optional(\Tyhp\Type::int())`). `\Tyhp\Type::of($value)` is a **runtime** helper that inspects a value — it is not what `typeof()` compiles to.
+Returns a `\Tyhp\Type` instance for a type expression. Scalars emit `\Tyhp\Type::int()` / `::string()` / etc. Declared classes emit `\Tyhp\Type::fromClassName(...)` with the fully-qualified class name. Structs emit `\Tyhp\Type::struct(...)` with the property schema. Source type aliases emit a factory call (`UserId()`, `Optional(\Tyhp\Type::int())`). `\Tyhp\Type::of($value)` is a **runtime** helper that inspects a value — it is not what `typeof()` compiles to.
 
 ```tyhp
 <?tyhp
@@ -194,7 +194,7 @@ use function App\Types\Optional;
 use function App\Types\UserId;
 
 $type = \Tyhp\Type::string();
-$userType = \Tyhp\Type::fromClassName(User::class);
+$userType = \Tyhp\Type::fromClassName(\User::class);
 $unionType = \Tyhp\Type::union(\Tyhp\Type::int(), \Tyhp\Type::string());
 $idType = UserId();
 $optType = Optional(\Tyhp\Type::int());

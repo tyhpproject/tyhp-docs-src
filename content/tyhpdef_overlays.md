@@ -22,8 +22,7 @@ A Composer package that ships tyhpdefs declares them on `extra.tyhp.package` in 
         "tyhp": {
             "package": {
                 "include": [
-                    "./_tyhpdef/*.tyhpdef",
-                    "./_tyhpdef/extensions/*.tyhpdef"
+                    "./_tyhpdef/*.tyhpdef"
                 ],
                 "overlay": [
                     "./_tyhpdef/overlays/stubs/*.tyhpdef",
@@ -40,7 +39,7 @@ A Composer package that ships tyhpdefs declares them on `extra.tyhp.package` in 
 | `include` | First. Baseline signatures plus package-local `extension { }` files when listed. | Conflict (`TYHP8002`). Additive `partial` may add members (see below). |
 | `overlay` | After `include`, **in array order**. Within one glob, paths expand lexicographically. | Last wins: full replace, overlay `partial` member merge, overlay `partial` header `;`, or `omit`. |
 
-Overlay globs must not also appear in `include`. `./_tyhpdef/*.tyhpdef` does not recurse into `overlays/` or `extensions/`. `./_tyhpdef/overlays/*.tyhpdef` does not recurse into `stubs/`. `tyhpdef/php` is tyhpdef-only builtins (`include` is `./_tyhpdef/*.tyhpdef` only). Scalar catalogs live in `tyhp/core` (`package.tyhpdef` plus `_tyhpdef/extensions/*.tyhpdef`).
+Overlay globs must not also appear in `include`. `./_tyhpdef/*.tyhpdef` does not recurse into subdirectories such as `overlays/`. `./_tyhpdef/overlays/*.tyhpdef` does not recurse into `stubs/`. `tyhpdef/php` is tyhpdef-only builtins (`include` is `./_tyhpdef/*.tyhpdef` only). A compiled package such as `tyhp/core` lists the one `package.tyhpdef` generated from its Tyhp source (`"include": ["./package.tyhpdef"]`, no overlays); the scalar extension catalogs are declared in that file.
 
 ## Stub overlays, then hand-written
 
@@ -211,7 +210,7 @@ After Layer 3, Tyhp can call `string_to_lower_case`, `string_to_upper_case`, and
 <?tyhpdef
 
 omit function \array_map();
-omit class \Closure {};
+omit class \SplTempFileObject {};
 
 partial class \DomainException {
     omit public function getPrevious();

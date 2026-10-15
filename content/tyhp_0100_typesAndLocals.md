@@ -23,7 +23,7 @@ Additionally, Tyhp requires types for:
 - Closure / arrow function parameters and return types — required unless the type is inferable from an expected callable type
 - Catch block exception types
 
-File-level `const NAME = value;` is untyped (PHP has no typed file-level constants). Write the type on a class constant, or describe an existing PHP constant in `.tyhpdef` as `const int NAME;`.
+File-level `const NAME = value;` is untyped (PHP has no typed file-level constants); a type annotation on it is an error. Reads of the constant take the widened type of its literal initializer: `const LIMIT = 5;` is `int`, `const NAME = 'tyhp';` is `string`, and `const A = 1, B = 'two';` gives each constant its own type. Write the type on a class constant, or describe an existing PHP constant in `.tyhpdef` as `const int NAME;`.
 
 `foreach` bindings may be typed (`foreach ($xs as int $k => string $v)` or value-only `foreach ($xs as string $v)`). The iterable’s key and value types must be assignable to those annotations; the loop variables then have the **declared** types and are not narrowed further. Omitting the types infers key and value from the iterable.
 

@@ -243,6 +243,60 @@ class Celsius implements \Tyhp\Contracts\FloatConvertible, \Tyhp\Contracts\IntCo
 Casts rewrite to the instance convert-to method: (int)$c -> $c->__toInt(), (float)$c -> $c->__toFloat(). Call arguments and `return` expressions that need the same conversion (object where a scalar/named type is expected, or a source type where a class with convert-from is expected) rewrite the same way: `$c` passed to an `int` parameter becomes `$c->__toInt()`, and `42` passed where `Celsius` is expected becomes `\Celsius::__from(42)`. String context works through \Stringable when a convert(self): string is declared (-> __toString).
 :::
 
+### Conversions Declared in an Extension
+
+A conversion declared in an [`extension`](tyhp_2100_extensions.md) applies only where that extension is active: in the file that declares it, in a file that imports it with `use extension`, and in every file once a file declares it with `global use extension`. Conversions declared in a class itself apply everywhere. In a file where the extension is not active, an argument that needs the conversion reports TYHP4010 and a `return` that needs it is a type error.
+
+A call that needs an extension conversion compiles to a call of the extension class's static method, also when the call goes through another namespace or a `use function` import. A short `=>` conversion in an extension compiles the same way:
+
+```php
+\Probe\takeWallet(\Probe\WalletConv::__from($n))
+```
+
+### Conversions on First-Class Callables
+
+A first-class callable (`describe(...)`, `$object->method(...)`, `Util::make(...)`, `$invokable(...)`, or an extension method such as `$text->label(...)`) whose callee has a parameter that other types convert to becomes a wrapper closure. The wrapper accepts those types in addition to the declared one and converts them before it calls the callee, so the value behaves like a direct call:
+
+```tyhp
+<?tyhp
+
+namespace App;
+
+final class Money
+{
+    public function __construct(public int $cents) {}
+
+    operator convert(int $value)
+    {
+        return new self($value);
+    }
+}
+
+function describe(Money $amount): string
+{
+    return "money:{$amount->cents}";
+}
+
+function run(): void
+{
+    $fn = describe(...);
+    echo $fn(5), "\n";                             // the int converts to a Money
+    array<string> $all = \array_map($fn, [5, 6]);  // callers in PHP get the same behavior
+}
+```
+
+```php
+$fn = (static fn(\App\Money|int $amount): string => describe((\is_int($amount) ? \App\Money::__from($amount) : $amount)));
+```
+
+The widening has these limits:
+
+- Only a first-class callable is widened. A variable declared `callable(Money): string` and a closure written with `fn` or `function` keep exactly the parameter types they declare.
+- By-reference, variadic, and generic-typed parameters are not converted.
+- A callee with no convertible parameter stays a plain native first-class callable.
+- The wrapper keeps the callee's return type. It adds one call frame and reflects as an anonymous closure.
+- For an overloaded function, the conversion is chosen per parameter position. See [Overloaded Functions as Values](tyhp_1200_functionOverloads.md#overloaded-functions-as-values).
+
 ## Word Operator: empty
 
 The empty word operator defines how an object behaves in emptiness checks. It takes a single self parameter and returns bool. The true, false, and null operators do NOT exist — express truthiness via operator convert(self): bool (-> __toBool).

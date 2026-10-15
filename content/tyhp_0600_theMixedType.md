@@ -55,6 +55,81 @@ function processValue(mixed $value): string {
 }
 ```
 
+## What Needs Narrowing
+
+Anything is assignable **to** `mixed`, but a `mixed` value is assignable only to `mixed` until it is narrowed: passing it to an `int` parameter or assigning it to an `int` variable is an error (TYHP4010, TYHP4008). These uses of a `mixed` value report TYHP4160 or a more specific diagnostic until the value is narrowed:
+
+- member access and method calls (`$m->name`, `$m->run()`), calling the value (`$m()`), and `$m::class`;
+- indexing (`$m[0]`);
+- arithmetic and the relational operators `<`, `>`, `<=`, `>=`;
+- string concatenation, interpolation, `echo`, and `print`;
+- spreading it (`[...$m]`, `f(...$m)`);
+- `$m->name ?? 1` and `$m->name ??= 1` on an instance member.
+
+Comparison with `===`, `isset()`, `$m ?? 1`, `$m['key'] ?? 1`, and an explicit cast such as `(int) $m` are not narrowing errors. A class constant declared `const mixed X` reads as `mixed` at every use.
+
+```tyhp
+<?tyhp
+
+function show(mixed $value): string {
+    // $value + 1;        // ERROR (TYHP4160)
+    // "v={$value}";      // ERROR (TYHP4120)
+    // $value->name;      // ERROR (TYHP4160)
+    $count = (int) $value;  // explicit cast
+    return (string) $count;
+}
+```
+
+Narrowing with `||` and `&&` combines the guards of variables: after `if ($m is int || $m is string)` the variable is `int|string`, and `if ($m is int && $m > 0)` narrows before the comparison runs. A guard on a property (`$h->p is int`) narrows on its own, but guards on properties and index keys are not combined across `||`. After `$m instanceof User`, `$m` is `User`; a guard that is redundant for a variable that already has a precise type keeps the precise type. When an assignment narrows a variable, its right-hand side is checked first with the variable's previous type, so `$m = $m + 1;` on a `mixed` `$m` is an error.
+
+A null check alone does not narrow `mixed` to a specific type: after `$m !== null` the value is still `mixed`.
+
+## Mixed and Generic Arguments
+
+A `mixed` argument binds a type parameter to `mixed`. A parameter declared `T extends int|string` therefore rejects it (TYHP4035), while an unconstrained `T` binds to `mixed`. A nullable argument binds an unconstrained `T` to the nullable type: passing an `?int` to `T $v` gives `T = ?int`.
+
+```tyhp
+<?tyhp
+
+function bounded<T extends int|string>(T $v): T { return $v; }
+function bare<T>(T $v): T { return $v; }
+
+function demo(mixed $m, ?int $n): void {
+    // bounded($m);          // ERROR (TYHP4035): `mixed` does not satisfy `int|string`
+    mixed $a = bare($m);     // T = mixed
+    ?int $b = bare($n);      // T = ?int
+}
+```
+
+A spread argument must be iterable, and its elements are checked against the parameters they fill: `f(...[1, 2])` for `f(string ...$s)` is rejected. A non-array argument to a generic builtin such as `\array_values(5)` is rejected rather than accepted as `mixed`.
+
+## Members That Do Not Exist
+
+Reading or calling a member that is not declared on a class, interface, or `object` type reports TYHP4101. A guard such as `\property_exists($f, 'name')` or `\method_exists($f, 'run')` makes the member available inside the guarded branch. A bare `object` has no members, so every access on it needs a narrowing check first.
+
+## Mixed and Generic Types Without Type Arguments
+
+`mixed` is also what an unspecified type argument means. A generic class written without type arguments (`Box` for `class Box<T>`) is `Box<mixed>` when it is assigned to an instantiation of the same class, and each type parameter widens to its declared `extends` bound when it has one. Like a `mixed` value, it is not assignable to a more specific target: `Box` is not assignable to `Box<int>`, while `Box<int>` is assignable to `Box` and `Box` is assignable to `Box<mixed>`. See [Generic Types Without Type Arguments](tyhp_0500_generics.md#generic-types-without-type-arguments).
+
+An `instanceof` check on a `mixed` value narrows it to the raw class, so it is assignable to `Box<mixed>` but not to `Box<int>`:
+
+```tyhp
+<?tyhp
+
+namespace App;
+
+class Box<T> {
+    public function __construct(public T $value) {}
+}
+
+function unwrap(mixed $candidate): Box<mixed> {
+    if ($candidate instanceof Box) {
+        return $candidate;       // OK: Box is Box<mixed>
+    }
+    return new Box<mixed>(null);
+}
+```
+
 ## Automatic Smart Casts
 
 After a type guard narrows the type, the compiler automatically tracks the narrower type within the guard's scope. No explicit casts or re-declarations are needed. This works with instanceof/is checks, null checks, built-in type-checking functions, and user-defined type guard functions.

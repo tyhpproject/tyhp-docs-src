@@ -139,7 +139,7 @@ Generic type parameters can have default types with `=`. Defaults must be traili
 ```tyhp
 class Collection<T = mixed> { ... }
 class Pair<T, U = T> { ... }
-class Promise<TReturn extends void|mixed = void> { ... }
+class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> { ... }
 ```
 
 ## Type Aliases
@@ -207,7 +207,7 @@ fn identity<T>(T $value): T => $value;
 
 ## Function and Method Overloads
 
-Multiple signatures for different parameter types with specialized return types. Only the implementation body is emitted to PHP. Zero-cost compile-time feature.
+Bodyless signatures followed by one implementation give each call the return type of the first declared signature that accepts it as written. If none does, the signatures are retried allowing implicit `operator convert` conversions (conversions to different types in more than one signature are ambiguous, TYHP4375); no match at all is TYHP4374. Callers see only the declared signatures. Only the implementation body is emitted to PHP. Zero-cost compile-time feature.
 
 <a href="tyhp_1200_functionOverloads.html">See full documentation →</a>
 
@@ -354,7 +354,7 @@ using await ($conn = new AsyncConnection($url)) { ... }
 
 ## Async and Await
 
-First-class `async`/`await` using PHP Fibers. Async functions return `Promise<T>` and lower to `Promise::_async` / `_await`. Blocking PHP I/O blocks the `tyhp/async` loop. Includes combinators (`Promise::all`, `race`, `batch`, `timeout`), async iteration, and cancellation tokens.
+First-class `async`/`await` using PHP Fibers. An async function's declared return type is the type you get when you `await` it; calling it returns a `Promise` of that type. Async code lowers to `Promise::_async` / `_await`. Blocking PHP I/O blocks the `tyhp/async` loop. Includes combinators (`Promise::all`, `race`, `batch`, `timeout`), async iteration, and cancellation tokens.
 
 <a href="tyhp_2600_asyncAndAwait.html">See full documentation →</a>
 

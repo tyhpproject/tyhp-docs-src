@@ -155,22 +155,6 @@ Type: `bool` (default: `false`). When true, generates or updates a `composer.jso
 Type: `object | null` (default: `null`). A map of named autoloader paths. When set, entry point files (root code files) will have `require_once` statements added for the Composer autoloader. Example: `{"default": "vendor/autoload.php"}`. Map **values** support [string interpolation](#string-interpolation).
 :::
 
-:::member[build.structBacking]
-Type: `string` (default: `"array"`). Controls how Tyhp structs are represented in compiled PHP. The default `"array"` compiles structs to associative arrays.
-:::
-
-:::member[build.decimalBacking]
-Type: `string` (default: `"bcmath"`). The PHP extension used for decimal arithmetic. Supported values: `"bcmath"`, `"gmp"`.
-:::
-
-:::member[build.decimalScale]
-Type: `int` (default: `28`). The default number of decimal places for decimal arithmetic operations.
-:::
-
-:::member[build.decimalRounding]
-Type: `string` (default: `"halfUp"`). The default rounding mode for decimal arithmetic.
-:::
-
 :::member[build.allowEval]
 Type: `bool` (default: `false`). When true, re-enables `eval()` usage in Tyhp code. By default, `eval()` is disabled for security and type-safety reasons.
 :::
@@ -334,10 +318,6 @@ Below is a comprehensive `tyhp.json` showing all available options with their de
         "sourcemapIncludeContent": false,
         "generateTyhpdef": false,
         "updateComposer": false,
-        "structBacking": "array",
-        "decimalBacking": "bcmath",
-        "decimalScale": 28,
-        "decimalRounding": "halfUp",
         "allowEval": false,
         "experimentalReadonlyCloneWith": false,
         "runtimeGenericChecks": false

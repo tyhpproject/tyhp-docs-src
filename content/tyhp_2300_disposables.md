@@ -6,357 +6,410 @@ status:
   state: complete
 ---
 
-Tyhp provides deterministic resource management through the IsDisposable and AsyncIsDisposable interfaces, the := (using assignment) operator, and the using block syntax. These features ensure that resources like database connections, file handles, and network sockets are properly cleaned up when they are no longer needed.
+Tyhp provides deterministic resource management through the `IsDisposable` and `AsyncIsDisposable` interfaces, the `:=` (using assignment) operator, and the `using` block. These features make sure resources such as database connections, file handles, and network sockets are cleaned up when you are finished with them.
 
 ## The IsDisposable Interface
 
-Any class that manages resources should implement `\Tyhp\Contracts\IsDisposable` (provided by the `tyhp/core` package). This interface requires a single dispose() method that performs cleanup.
+Any class that manages a resource should implement `\Tyhp\Contracts\IsDisposable` (provided by the `tyhp/core` package). The interface requires a single `dispose()` method that performs cleanup.
 
 ```tyhp
 <?tyhp
 
-class DatabaseConnection implements \Tyhp\Contracts\IsDisposable {
-    private mixed $handle;
+use Tyhp\Contracts\IsDisposable;
 
-    public function __construct(string $dsn): void {
-        $this->handle = \pg_connect($dsn);
-    }
+class DatabaseConnection implements IsDisposable {
+    public function __construct(private readonly string $name) {}
 
-    public function query(string $sql): mixed {
-        return \pg_query($this->handle, $sql);
+    public function query(string $sql): string {
+        return "{$this->name}: {$sql}";
     }
 
     public function dispose(): void {
-        \pg_close($this->handle);
+        echo "closed {$this->name}\n";
     }
 }
 ```
 
 ## The AsyncIsDisposable Interface
 
-For resources that require asynchronous cleanup (e.g., closing a connection over the network), implement `\Tyhp\Contracts\AsyncIsDisposable` (provided by the `tyhp/async` package). This interface requires a disposeAsync() method that returns a Promise.
+For resources that need asynchronous cleanup (for example, closing a connection over the network), implement `\Tyhp\Contracts\AsyncIsDisposable` (provided by the `tyhp/async` package). The interface requires a `disposeAsync()` method that returns a promise.
 
 ```tyhp
 <?tyhp
 
-class AsyncConnection implements \Tyhp\Contracts\AsyncIsDisposable {
+use Tyhp\Contracts\AsyncIsDisposable;
+use Tyhp\Promise;
+
+class AsyncConnection implements AsyncIsDisposable {
+    public function __construct(private readonly string $name) {}
+
+    public async function fetch(string $path): string {
+        await Promise::delay(5);
+        return "{$this->name}{$path}";
+    }
+
     public async function disposeAsync(): void {
-        await $this->sendCloseCommand();
-        await $this->waitForAcknowledgement();
+        await Promise::delay(5);
+        echo "async closed {$this->name}\n";
     }
 }
 ```
 
 ## The := Operator (Using Assignment)
 
-The := operator declares a variable as disposable. When the variable leaves scope, its dispose() method is called automatically. This is the simplest way to ensure resources are cleaned up.
+`:=` assigns a disposable value to a variable and registers it for disposal. The resource is disposed automatically when the enclosing scope ends, whether it ends normally or by an exception: the function's return for a `:=` at function level, or the end of the block for a `:=` inside a nested block (see [Nested Blocks](#nested-blocks)). The value on the right must be an object of a class that implements `IsDisposable` or `AsyncIsDisposable`; any other type is rejected with **TYHP4030**.
 
 ```tyhp
 <?tyhp
 
-function processData(): void {
-    // := marks $db as disposable — it is disposed when it leaves scope
-    $db := new DatabaseConnection('host=localhost dbname=mydb');
-
-    $result = $db->query('SELECT * FROM users');
-    // ... process result ...
-
-    // $db->dispose() is called automatically when the function returns
+function scoped(): void {
+    // := registers $db for disposal when the function returns
+    $db := new DatabaseConnection('scoped');
+    echo $db->query('SELECT 1'), "\n";
 }
+
+// scoped() prints:
+// scoped: SELECT 1
+// closed scoped
+```
+
+In an async function, an `AsyncIsDisposable` value declared with `:=` has `disposeAsync()` awaited when the function finishes:
+
+```tyhp
+<?tyhp
+
+async function asyncScoped(): void {
+    $conn := new AsyncConnection('scoped-async');
+    string $data = await $conn->fetch('/api/data');
+    echo $data, "\n";
+}
+
+// await asyncScoped() prints:
+// scoped-async/api/data
+// async closed scoped-async
 ```
 
 ## Compiled PHP Output — DisposableScope
 
-The := operator compiles to a `\Tyhp\DisposableScope` pattern from the `tyhp/async` package. A scope variable is created and resources are registered with it via `$__scope_0->using()`. When the scope variable goes out of scope, PHP's __destruct() fires and disposes all registered resources in reverse order.
+`:=` compiles to a `\Tyhp\DisposableScope` from the `tyhp/async` package. The compiler creates one scope object per scope that declares disposables and registers each resource with `$scope->using(...)`. When PHP destroys the scope object as the function returns, its `__destruct()` disposes every registered resource.
 
 ```php
 <?php
 
-function processData(): void {
+function scoped(): void
+{
     $__scope_0 = \Tyhp\DisposableScope::create();
-    $db = $__scope_0->using(new DatabaseConnection('host=localhost dbname=mydb'));
-
-    $result = $db->query('SELECT * FROM users');
-    // ... process result ...
-
-    // When $__scope_0 goes out of scope, __destruct() fires
-    // and calls $db->dispose() automatically
+    $db = $__scope_0->using(new DatabaseConnection('scoped'));
+    echo $db->query('SELECT 1'), "\n";
 }
 ```
 
 ## Multiple Disposable Resources
 
-Multiple disposable resources in the same scope share a single DisposableScope. Resources are disposed in reverse order of registration (LIFO — Last In, First Out), matching the behavior of C#'s using statement.
+Resources declared with `:=` in the same scope share one `DisposableScope` and are disposed in reverse order of registration (LIFO), like C#'s `using` declarations.
 
 ```tyhp
 <?tyhp
 
-function transferData(): void {
-    $source := new DatabaseConnection($sourceDsn);
-    $target := new DatabaseConnection($targetDsn);
-    $logger := new FileLogger('/var/log/transfer.log');
-
-    // ... transfer data ...
-
-    // Disposed in reverse order: $logger, $target, $source
+function multiScope(): void {
+    $source := new DatabaseConnection('source');
+    $target := new DatabaseConnection('target');
+    $logger := new DatabaseConnection('logger');
+    echo "working\n";
 }
+
+// Prints:
+// working
+// closed logger
+// closed target
+// closed source
 ```
 
 ```php
 <?php
 
-function transferData(): void {
-    $__scope_0 = \Tyhp\DisposableScope::create();
-    $source = $__scope_0->using(new DatabaseConnection($sourceDsn));
-    $target = $__scope_0->using(new DatabaseConnection($targetDsn));
-    $logger = $__scope_0->using(new FileLogger('/var/log/transfer.log'));
-
-    // ... transfer data ...
-
-    // $__scope_0->__destruct() disposes: $logger, $target, $source
+function multiScope(): void
+{
+    $__scope_1 = \Tyhp\DisposableScope::create();
+    $source = $__scope_1->using(new DatabaseConnection('source'));
+    $target = $__scope_1->using(new DatabaseConnection('target'));
+    $logger = $__scope_1->using(new DatabaseConnection('logger'));
+    echo "working\n";
 }
 ```
 
-## Nested Disposable Scopes
+## Nested Blocks
 
-Each nested scope that contains disposable resources gets its own DisposableScope with a unique suffix (`$__scope_0`, `$__scope_1`, …). Inner scopes dispose independently of outer scopes.
+A resource declared with `:=` inside a nested block (an `if`, loop, or similar block) is disposed when that block ends, and again for each loop iteration. The compiler wraps the block's statements in `try`/`finally`, so the resource is also disposed when the block exits through `return`, `break`, or an exception. Resources declared with `:=` at function level are disposed when the function returns, after any nested-block resources.
 
 ```tyhp
 <?tyhp
 
-function process(): void {
-    $outer := new ResourceA();
-
+function nested(bool $condition): void {
+    $outer := new DatabaseConnection('outer');
     if ($condition) {
-        $inner := new ResourceB();
-        // $inner is disposed when this if-block exits
+        $inner := new DatabaseConnection('inner');
+        echo "in block\n";
     }
-
-    // $outer is disposed when the function returns
+    echo "after block\n";
 }
+
+// nested(true) prints:
+// in block
+// closed inner
+// after block
+// closed outer
 ```
 
 ```php
 <?php
 
-function process(): void {
-    $__scope_0 = \Tyhp\DisposableScope::create();
-    $outer = $__scope_0->using(new ResourceA());
-
+function nested(bool $condition): void
+{
+    $__scope_2 = \Tyhp\DisposableScope::create();
+    $outer = $__scope_2->using(new DatabaseConnection('outer'));
     if ($condition) {
-        $__scope_1 = \Tyhp\DisposableScope::create();
-        $inner = $__scope_1->using(new ResourceB());
-        // $__scope_1->__destruct() fires here
+        $inner = null;
+        try {
+            $inner = new DatabaseConnection('inner');
+            echo "in block\n";
+        } finally {
+            if ($inner instanceof \Tyhp\Contracts\IsDisposable) {
+                $inner->dispose();
+            }
+        }
     }
-
-    // $__scope_0->__destruct() fires here
+    echo "after block\n";
 }
 ```
+
+A [`using` block](#the-using-block-syntax) states the same intent explicitly and also works for several resources at once.
 
 ## The using Block Syntax
 
-For guaranteed deterministic disposal regardless of circular references or GC behavior, Tyhp provides the using block syntax. Unlike the := operator which uses DisposableScope and __destruct(), the using block always compiles to a try/finally block.
+A `using` block disposes its resources when the block ends, regardless of how it ends. It always compiles to `try`/`finally`, so it does not depend on reference counting or garbage collection. The resource variables belong to the block.
 
 ```tyhp
 <?tyhp
 
-// Single resource using block
-using ($db = new DatabaseConnection($dsn)) {
-    $result = $db->query('SELECT * FROM users');
-    // $db->dispose() is guaranteed in the finally block
+function usingSingle(): void {
+    using ($db = new DatabaseConnection('single')) {
+        echo $db->query('SELECT 2'), "\n";
+    }
 }
+
+// Resource variables may carry a type
+function usingTyped(): void {
+    using (DatabaseConnection $db = new DatabaseConnection('typed')) {
+        echo $db->query('SELECT 3'), "\n";
+    }
+}
+
+// usingSingle() prints:
+// single: SELECT 2
+// closed single
 ```
 
 ```php
 <?php
 
-// Single resource compiles to try/finally
-$db = new \DatabaseConnection($dsn);
-try {
-    $result = $db->query('SELECT * FROM users');
-} finally {
-    if ($db instanceof \Tyhp\Contracts\IsDisposable) {
-        $db->dispose();
+// A single resource compiles to try/finally
+function usingSingle(): void
+{
+    $db = new DatabaseConnection('single');
+    try {
+        echo $db->query('SELECT 2'), "\n";
+    } finally {
+        if ($db instanceof \Tyhp\Contracts\IsDisposable) {
+            $db->dispose();
+        }
     }
 }
 ```
 
 ## Multiple Resources in a using Block
 
-Multiple resources in a using block compile to a flat try/finally with null initialization and error collection. Disposal errors are caught individually and aggregated into an AggregateException, ensuring all resources are disposed even if one fails.
+A `using` block can declare several resources separated by commas. They are initialized in order and disposed in reverse order in a single `finally`. Each `dispose()` call is isolated, so an exception from one does not prevent the others from running; the collected exceptions are then thrown together as an `AggregateException`.
 
 ```tyhp
 <?tyhp
 
-using ($db = new DatabaseConnection($dsn), $cache = new CacheConnection()) {
-    // both are disposed in reverse order in finally
+function usingMultiple(): void {
+    using ($db = new DatabaseConnection('db'), $cache = new DatabaseConnection('cache')) {
+        echo "working\n";
+    }
 }
+
+// Prints:
+// working
+// closed cache
+// closed db
 ```
 
 ```php
 <?php
 
-$db = null;
-$cache = null;
-try {
-    $db = new \DatabaseConnection($dsn);
-    $cache = new \CacheConnection();
-    // body
-} finally {
-    $__disposeErrors = [];
-    if ($cache instanceof \Tyhp\Contracts\IsDisposable) {
-        try { $cache->dispose(); } catch (\Throwable $__e) { $__disposeErrors[] = $__e; }
-    }
-    if ($db instanceof \Tyhp\Contracts\IsDisposable) {
-        try { $db->dispose(); } catch (\Throwable $__e) { $__disposeErrors[] = $__e; }
-    }
-    if (!empty($__disposeErrors)) {
-        throw new \Tyhp\Exceptions\AggregateException($__disposeErrors, 'One or more errors during disposal');
+function usingMultiple(): void
+{
+    $db = null;
+    $cache = null;
+    try {
+        $db = new DatabaseConnection('db');
+        $cache = new DatabaseConnection('cache');
+        echo "working\n";
+    } finally {
+        $__disposeErrors = [];
+        if ($cache instanceof \Tyhp\Contracts\IsDisposable) {
+            try {
+                $cache->dispose();
+            }
+            catch (\Throwable $__e) {
+                $__disposeErrors[] = $__e;
+            }
+        }
+        if ($db instanceof \Tyhp\Contracts\IsDisposable) {
+            try {
+                $db->dispose();
+            }
+            catch (\Throwable $__e) {
+                $__disposeErrors[] = $__e;
+            }
+        }
+        if (!empty($__disposeErrors)) {
+            throw new \Tyhp\Exceptions\AggregateException($__disposeErrors, 'One or more errors during disposal');
+        }
     }
 }
 ```
 
+With a single resource, an exception thrown by `dispose()` propagates unchanged.
+
 ## Reverse Order Disposal
 
-Both := and using dispose resources in reverse order (LIFO — Last In, First Out). This ensures that resources are cleaned up in the opposite order they were acquired, which is important when resources depend on each other (e.g., a query depends on a connection).
+Both `:=` and `using` dispose resources in reverse order (last in, first out), so resources are released in the opposite order they were acquired. This matters when resources depend on each other, such as a query that depends on a connection.
 
 ## Choosing := vs using Block
 
-Both approaches achieve automatic disposal, but they differ in guarantees and syntax:
-
 :::member[:= operator]
-Uses DisposableScope + __destruct(). Lighter syntax, works anywhere. Relies on PHP's reference counting for timely disposal. May be delayed by circular references.
+Disposes when the function returns. Lighter syntax, works anywhere in a function. Relies on PHP reference counting to run the scope's destructor, so a reference cycle can delay disposal (see [Circular Reference Mitigation](#circular-reference-mitigation)). A disposal error is reported as a PHP warning, not thrown.
 :::
 
 :::member[using block]
-Uses try/finally. Deterministic disposal guaranteed regardless of circular references or GC behavior. Scopes the resource to the block body.
+Disposes when the block ends, through `try`/`finally`. Deterministic regardless of reference cycles or garbage collection. Disposal errors are thrown.
 :::
 
 ## Async Disposal
 
-When disposing async resources, DisposableScope waits for `disposeAsync()` to settle:
+When `DisposableScope` disposes an `AsyncIsDisposable`, it waits for `disposeAsync()` to settle:
 
-- If the promise is already settled, it observes the result immediately (this also works from a synchronous EventLoop callback).
-- Inside a Fiber, it uses `Promise::_await()` so the running loop can resume that Fiber.
-- Outside a Fiber with the loop idle, it uses `Promise::wait()` (block until *this* promise settles). It does not call `EventLoop::run()`, which would keep draining unrelated queued work after settlement.
-- A *pending* async dispose from a synchronous callback while the loop is already running cannot be waited on (re-entrant `run()` is forbidden, and there is no Fiber to suspend). That throws `AsyncContextException`. Prefer `using await` or dispose from async code.
+- If the promise has already settled, it observes the result immediately (this also works from a synchronous event-loop callback).
+- Inside a fiber, it suspends the fiber with `Promise::_await()` so the running loop can continue.
+- Outside a fiber with the loop idle, it blocks with `Promise::wait()` until this promise settles. It does not run unrelated queued work.
+- A *pending* async disposal from a synchronous callback while the loop is running cannot be waited on, and throws `AsyncContextException`. Prefer `using await`, or dispose from async code.
 
-The `using await` syntax provides explicit async disposal in the finally block. There is no dedicated diagnostic for `using await` outside an async function — TYHP4028 (`CheckerAwaitOutsideAsync`) applies to `await` expressions. The emitter still emits `Promise::_await` in the `using await` finally block.
+`using await` disposes its resources asynchronously in the `finally` block. It is only allowed inside async functions, closures, and blocks; elsewhere it reports **TYHP4028**. A resource that implements `AsyncIsDisposable` has `disposeAsync()` awaited; one that implements only `IsDisposable` has `dispose()` called.
 
 ```tyhp
 <?tyhp
 
-async function fetchData(): void {
-    $conn := new AsyncConnection($url);
-    $data = await $conn->fetch('/api/data');
-    // $conn->disposeAsync() is awaited when scope exits
+async function usingAwait(): void {
+    using await ($conn = new AsyncConnection('using-await')) {
+        string $data = await $conn->fetch('/api/data');
+        echo $data, "\n";
+    }
 }
 
-// using await for explicit async disposal
-using await ($conn = new AsyncConnection($url)) {
-    $data = await $conn->fetch('/api/data');
-}
+// await usingAwait() prints:
+// using-await/api/data
+// async closed using-await
 ```
 
 ```php
 <?php
 
-// using await compiles to try/finally with async dispose
-$conn = new \AsyncConnection($url);
-try {
-    $data = \Tyhp\Promise::_await($conn->fetch('/api/data'));
-} finally {
-    if ($conn instanceof \Tyhp\Contracts\AsyncIsDisposable) {
-        \Tyhp\Promise::_await($conn->disposeAsync());
-    }
+// using await compiles to try/finally with an awaited async dispose
+function usingAwait(): \Tyhp\Promise
+{
+    return \Tyhp\Promise::_async(function (): void {
+        $conn = new AsyncConnection('using-await');
+        try {
+            $data = \Tyhp\Promise::_await($conn->fetch('/api/data'));
+            echo $data, "\n";
+        } finally {
+            if ($conn instanceof \Tyhp\Contracts\AsyncIsDisposable) {
+                \Tyhp\Promise::_await($conn->disposeAsync());
+            }
+            elseif ($conn instanceof \Tyhp\Contracts\IsDisposable) {
+                $conn->dispose();
+            }
+        }
+    });
 }
 ```
+
+The `tyhp/async` package also provides [`DisposableHelper::dispose()`](package_async.md#disposablehelper) for disposing several resources from async code without a `using` block.
 
 ## Circular Reference Mitigation
 
-The DisposableScope relies on PHP's __destruct() for disposal, which requires reference counting to work. The compiler handles the most common circular reference pattern automatically: closures that capture $this and are stored as properties on the same object are rewritten to use WeakReference-based captures.
+`DisposableScope` relies on PHP's `__destruct()`, which only runs promptly when no reference cycle keeps the scope alive. The compiler handles the most common cycle automatically: a closure that captures `$this` and is stored in a property of the same object is rewritten to capture a `WeakReference`.
 
 ```php
 <?php
 
-// Instead of this (creates circular reference):
-$this->onReady = function() {
+// Instead of this (creates a reference cycle):
+$this->onReady = function (): void {
     $this->emit('ready');
 };
 
-// The compiler generates this (breaks the cycle):
-$__weakSelf = \WeakReference::create($this);
-$this->onReady = function() use ($__weakSelf) {
-    $__weakSelf->get()?->emit('ready');
+// the compiler generates this (the variable name carries a numeric suffix):
+$__weakSelf_1 = \WeakReference::create($this);
+$this->onReady = function () use ($__weakSelf_1): void {
+    $__weakSelf_1->get()?->emit('ready');
 };
 ```
 
-:::tip
-When the compiler detects unresolvable circular references between disposable objects (e.g., bidirectional parent-child object graphs), it falls back to try/finally for that specific scope and emits a warning.
-:::
+When the compiler finds `:=` variables that reference each other (for example `$parent->peer = $child; $child->peer = $parent;`), it cannot rely on reference counting. It reports warning TYHP4212 and compiles that scope to `try`/`finally` instead of `DisposableScope`, disposing the resources in reverse order when the function exits.
 
 ## Best Practices
 
 :::tip
-Use := for resources that should be auto-disposed when leaving scope — it is the simplest and most concise approach for most cases.
+Use `:=` for resources that should be disposed when the function finishes — it is the simplest and most concise approach for most cases.
 :::
 
 :::tip
-Use the using block when you need guaranteed deterministic disposal, especially in code with complex object graphs or circular references.
+Use a `using` block when a resource must be disposed at the end of a specific block, when disposal errors must be thrown, or when the object graph contains reference cycles.
 :::
 
 :::tip
-Implement IsDisposable on any class that manages external resources like database connections, file handles, or network sockets.
+Implement `IsDisposable` on any class that manages an external resource such as a database connection, file handle, or network socket.
 :::
 
 :::tip
-Implement AsyncIsDisposable for resources that require async cleanup (e.g., closing a network connection that requires a server acknowledgement).
+Implement `AsyncIsDisposable` for resources that need async cleanup, such as closing a network connection that waits for a server acknowledgement.
 :::
 
 :::tip
-Make dispose() calls idempotent — safe to call multiple times without side effects.
+Make `dispose()` idempotent, so calling it more than once is harmless.
 :::
 
 ## Common Mistakes
 
 :::danger
-Do not use := with types that don't implement IsDisposable — the compiler reports an error.
+Do not call `dispose()` yourself on a `:=` variable. The scope disposes the resource again when the function returns, so `dispose()` runs twice.
 :::
 
 :::danger
-Do not manually call dispose() on := variables — disposal is automatic and calling it manually can result in double-disposal.
+Do not declare the same resource with both `:=` and `using`. Pick one approach per resource.
 :::
 
 :::danger
-Do not mix := operator and using block syntax for the same resource — pick one approach per scope.
+Do not use `:=`, `using`, or `using await` with a class that does not implement `IsDisposable` (or `AsyncIsDisposable`). The compiler rejects it with **TYHP4030**.
 :::
 
 :::danger
-Do not create circular references between disposable objects without the compiler's WeakReference mitigation — this can delay __destruct() calls.
+Do not create reference cycles between disposable objects held in `:=` variables unless you accept the `try`/`finally` fallback described above.
 :::
 
 :::danger
-Do not forget that disposal errors are collected into an AggregateException in using blocks — handle them appropriately.
+Remember that a `using` block with several resources reports disposal errors as one `AggregateException`; catch and handle it where the block runs.
 :::
-
-```tyhp
-<?tyhp
-
-class NotDisposable {
-    public string $value;
-}
-
-// ERROR: Right-hand side does not implement IsDisposable
-// $x := new NotDisposable();
-
-// ERROR: Do not manually call dispose on := variables
-// function bad(): void {
-//     $db := new DatabaseConnection($dsn);
-//     $db->dispose();  // Wrong! dispose() will be called again automatically
-// }
-```
-
-## Compiler Errors
-
-- Using := with a type that does not implement IsDisposable or AsyncIsDisposable.
-- Using using block with a non-disposable type.
