@@ -6,7 +6,7 @@ status:
   state: complete
 ---
 
-The Tyhp compiler is a .NET application targeting .NET 9. This page covers system requirements and how to install the **805.1.0-beta.2** compiler.
+The Tyhp compiler is a .NET application targeting .NET 9. This page covers system requirements and how to install the **805.1.0-beta.3** compiler.
 
 ## System Requirements
 
@@ -118,7 +118,7 @@ vendor/bin/tyhp version
 You should see output similar to:
 
 ```
-Tyhp compiler: 805.1.0-beta.2
+Tyhp compiler: 805.1.0-beta.3
 .NET runtime:   .NET 9.0.x
 ANTLR runtime:  4.x.x
 OS:             ...
