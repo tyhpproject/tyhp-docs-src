@@ -3,7 +3,7 @@
         'name' => 'tyhp/docs',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'f08e213ce3e5a489fd09f11cae244fa425e4b5c6',
+        'reference' => 'ed6fcc23b37c375b42adc87fab035270bbb20806',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -112,7 +112,7 @@
         'tyhp/docs' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'f08e213ce3e5a489fd09f11cae244fa425e4b5c6',
+            'reference' => 'ed6fcc23b37c375b42adc87fab035270bbb20806',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

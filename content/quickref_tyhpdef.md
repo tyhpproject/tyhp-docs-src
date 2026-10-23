@@ -19,13 +19,14 @@ function myPhpFunction(string $input): int;
 
 ## Variables and Constants
 
-Declare global PHP variables and constants with types. Use `as` for aliasing. Top-level `deprecated`/`obsolete` work. Tyhpdef `??` records PHP's expected start value (the live value may differ); `&` is not a tyhpdef form.
+Declare global PHP variables and constants with types. Use `as` to alias a constant. Top-level `deprecated`/`obsolete` work. Tyhpdef `??` records PHP's expected start value (the live value may differ); `&` is not a tyhpdef form.
 
 <a href="tyhpdef_variablesAndConstants.html">See full documentation →</a>
 
 ```tyhp
+<?tyhpdef
 bool $debugMode;
-string $legacy_app_name as $appName;
+string $appName;
 
 const string APP_ENV;
 const int \MAX_LOOPS_ALLOWED as MAX_LOOPS;
@@ -38,9 +39,20 @@ Declare function signatures with typed parameters (including optional, reference
 <a href="tyhpdef_functions.html">See full documentation →</a>
 
 ```tyhp
-function \array_map<T, U>(callable(T): U $callback, array<T> $array): array<U>;
+<?tyhpdef
+class UserData {
+    public int $id;
+}
+
+class Mapper {
+    public function map<TValue, TResult extends void|never|mixed>(
+        callable(TValue): TResult $callback,
+        array<TValue> $array
+    ): array<TResult>;
+}
+
 async function fetchUserData(int $userId): UserData;
-function \array_key_exists as keyExists(int|string $key, array $array): bool;
+function key_exists as keyExists(int|string $key, array $array): bool;
 function toCamelCase(extends string $str): string;
 
 #[\Tyhp\Php(">=8.2 <8.4")]
@@ -56,24 +68,37 @@ Attach Tyhp extension methods and operator overloads to PHP types. **Standalone*
 <a href="tyhpdef_extensions.html">See full documentation →</a>
 
 ```tyhp
+<?tyhpdef
+class StringOperatorBacker {
+    public static function toUpper(string $value): string;
+    public static function multiply(string $left, int $right): string;
+}
+
 extension StringOperators extends string {
     fn toUpper(): string
-        => StringOperators__tyhpExtensionBacker::toUpper($this);
+        => StringOperatorBacker::toUpper($this);
     operator * (self $left, int $right): string
-        => StringOperators__tyhpExtensionBacker::__multiply($left, $right);
+        => StringOperatorBacker::multiply($left, $right);
 }
 
 class Money {
     public function plus(Money $other): Money;
+    public function __toString(): string;
 
     extension operator +(self $left, self $right): self => $left->plus($right);
 
     extension fn formatCurrency(string $locale = "en_US"): string
         => $locale . " " . $this->__toString();
+}
 
+extension MoneyFormatting extends Money {
+    fn format(): string => $this->__toString();
+}
+
+partial class Money {
     use extension MoneyFormatting {
         MoneyFormatting::format as formatExtended;
-    };
+    }
 }
 ```
 
@@ -124,7 +149,7 @@ class \Vendor\LongNamespace\SomeClass as ShortName {
 
 ```tyhp
 <?tyhpdef
-// @overlay-against: interface Iterator extends Traversable
+// @overlay-against: interface Iterator
 partial interface Iterator<TKey = mixed, TValue = mixed> extends \Traversable<TKey, TValue>;
 partial interface Iterator {
     public function current(): TValue;
@@ -185,13 +210,20 @@ Declare PHP traits with typed properties, methods, constants, abstract methods, 
 <a href="tyhpdef_traits.html">See full documentation →</a>
 
 ```tyhp
+<?tyhpdef
 trait Collection<T> {
     public function add(T $item): void;
     public function getItems(): array<T>;
 }
+```
 
-// in Tyhp code:
-use Collection<User>;
+```tyhp
+<?tyhp
+class User {}
+
+class UserList {
+    use Collection<User>;
+}
 ```
 
 ## Structs
@@ -247,13 +279,18 @@ namespace EL {
 
 ## Import Aliases
 
-Alias nearly anything with `as` — functions, classes, interfaces, traits, enums, properties, methods, constants, variables, and enum cases. Only the aliased name is available in Tyhp.
+Alias a namespaced PHP class with `as` (`\Vendor\LegacyApi as Api`). Methods inside that declaration can be aliased the same way. Only the aliased name is available in Tyhp.
 
 <a href="tyhpdef_importAliases.html">See full documentation →</a>
 
 ```tyhp
-class LegacyApi as Api {
-    public string $usr_nm as $username;
+<?tyhpdef
+class User {
+    public int $id;
+}
+
+class \Vendor\LegacyApi as Api {
+    public string $usr_nm;
     public function get_usr as getUser(int $id): ?User;
 }
 ```
@@ -265,13 +302,23 @@ Declare multiple signatures for the same function/method name to describe PHP fu
 <a href="tyhpdef_overloadedFunctions.html">See full documentation →</a>
 
 ```tyhp
-function \json_decode(string $json, true $assoc): JsonAssoc|null;
-function \json_decode(string $json, false $assoc): JsonObject|null;
-function \json_decode(string $json, null $assoc = null): JsonObject|null;
+<?tyhpdef
+class DecodeObject {}
+class User {
+    public int $id;
+}
 
-public function find(int $id): ?User;
-public function find(string $uuid): ?User;
-public function find(array<string, mixed> $criteria): array<User>;
+type DecodeAssoc = array<string, mixed>;
+
+function decode_json(string $json, true $assoc): DecodeAssoc|null;
+function decode_json(string $json, false $assoc): DecodeObject|null;
+function decode_json(string $json, null $assoc = null): DecodeObject|null;
+
+class UserRepo {
+    public function find(int $id): ?User;
+    public function find(string $uuid): ?User;
+    public function find(array<string, mixed> $criteria): array<User>;
+}
 ```
 
 ## The `deprecated` and `obsolete` Keywords
@@ -281,8 +328,11 @@ public function find(array<string, mixed> $criteria): array<User>;
 <a href="tyhpdef_deprecatedKeyword.html">See full documentation →</a>
 
 ```tyhp
-deprecated function \mysql_connect(string $server, string $user, string $pass): \mysqli|false;
-obsolete function \md5(string $string, bool $binary = false): string;
+<?tyhpdef
+class \Vendor\Connection {}
+
+deprecated function \vendor_connect(string $server, string $user, string $pass): \Vendor\Connection|false;
+obsolete function \vendor_md5(string $string, bool $binary = false): string;
 ```
 
 ## Runtime Errors and Exceptions
@@ -292,7 +342,8 @@ When tyhpdef declarations don't match actual PHP code, runtime errors can occur.
 <a href="tyhpdef_runTimeErrorsAndExceptions.html">See full documentation →</a>
 
 ```tyhp
-class \InvalidArgumentException extends \LogicException {
+<?tyhpdef
+class \Vendor\JsonException extends \Exception {
     public function __construct(
         string $message = "",
         int $code = 0,
@@ -300,6 +351,6 @@ class \InvalidArgumentException extends \LogicException {
     ): void;
 }
 
-/** @throws \JsonException When JSON encoding fails */
-function \json_encode(mixed $value, int $flags = 0, int $depth = 512): string|false;
+/** @throws \Vendor\JsonException When encoding fails */
+function \vendor_encode(mixed $value): string|false;
 ```

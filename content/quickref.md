@@ -2,7 +2,7 @@
 title: 'Tyhp Quick Reference'
 ---
 
-A condensed overview of Tyhp language features. Each section includes a brief explanation and representative code. Features marked **not in this alpha** are planned (Tier 3) and will not compile yet.
+A condensed overview of Tyhp language features. Each section includes a brief explanation and representative code.
 
 ## File Tags and Open Tags
 
@@ -26,16 +26,19 @@ $greeting = 'Hello, Tyhp!';
 ```tyhp
 <?tyhp
 #[\Tyhp\Php(">=8.4")]
-function array_find(array $array, callable $callback): mixed {
-    return null;
-}
-
-declare(php=">=8.4") {
-    function only_84(): void {}
+function firstEven(array<int> $items): ?int {
+    return \array_find($items, fn (int $n): bool => $n % 2 === 0);
 }
 
 declare(php="<8.4") {
-    function only_84(): void {}
+    function firstEven(array<int> $items): ?int {
+        foreach ($items as $n) {
+            if ($n % 2 === 0) {
+                return $n;
+            }
+        }
+        return null;
+    }
 }
 ```
 
@@ -82,9 +85,18 @@ Built-in types gain generic parameters: `array<T>`, `Iterator<K, V>`, `\Closure<
 <a href="tyhp_0150_newTypes.html">See full documentation →</a>
 
 ```tyhp
+<?tyhp
+class User {
+    public function __construct(public int $id): void {}
+}
+
+async function fetchUser(int $id): User {
+    return new User($id);
+}
+
 decimal $price = \Tyhp\decimal('19.99');
-callable(string): int $parser;                      // takes string, returns int
-\Closure<callable(string): int> $asClosure;         // Closure instance with that shape
+callable(string): int $parser = fn (string $s): int => \strlen($s);
+\Closure<callable(string): int> $asClosure = \Closure::fromCallable($parser);
 Promise<User> $future = fetchUser(42);
 ```
 
@@ -137,9 +149,17 @@ Generic type parameters can have default types with `=`. Defaults must be traili
 <a href="tyhp_3500_genericDefaults.html">See full documentation →</a>
 
 ```tyhp
-class Collection<T = mixed> { ... }
-class Pair<T, U = T> { ... }
-class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> { ... }
+<?tyhp
+class Collection<T = mixed> {
+    public function __construct(private array<T> $items = []): void {}
+}
+
+class Pair<T, U = T> {
+    public function __construct(public T $first, public U $second): void {}
+}
+
+Collection $anything = new Collection();   // Collection<mixed>
+Pair<int> $point = new Pair<int>(3, 4);    // Pair<int, int>
 ```
 
 ## Type Aliases
@@ -200,9 +220,14 @@ Use `fn` for single-expression named functions and methods. Compiles to a standa
 <a href="tyhp_1100_shortFunctionSyntax.html">See full documentation →</a>
 
 ```tyhp
+<?tyhp
 fn double(int $n): int => $n * 2;
-public fn getValue(): int => $this->value;
 fn identity<T>(T $value): T => $value;
+
+class Counter {
+    public function __construct(private int $value): void {}
+    public fn getValue(): int => $this->value;
+}
 ```
 
 ## Function and Method Overloads
@@ -212,11 +237,15 @@ Bodyless signatures followed by one implementation give each call the return typ
 <a href="tyhp_1200_functionOverloads.html">See full documentation →</a>
 
 ```tyhp
+<?tyhp
 function convert(string|int|float $v, true $toInt): int;
 function convert(string|int|float $v, false $toInt): float;
 function convert(string|int|float $v, bool $toInt = false): int|float {
-    // implementation
+    return $toInt ? (int)$v : (float)$v;
 }
+
+int $whole = convert('42.7', true);     // first signature: int
+float $exact = convert('42.7', false);  // second signature: float
 ```
 
 ## Scalar Pseudo-Objects
@@ -226,10 +255,15 @@ Call methods on scalar types (`string`, `int`, `float`, `bool`, `array`) and `\C
 <a href="tyhp_1000_scalarPseudoObjects.html">See full documentation →</a>
 
 ```tyhp
-$name->contains('World');              // \str_contains($name, 'World')
-$name->trim()->toLower();              // \Tyhp\StringHelper::strtolower(\trim($name))
-$numbers->mapped(fn($n) => $n * 2);    // \array_map(fn($n) => $n * 2, $numbers)
-$price->round(2);                      // \round($price, 2)
+<?tyhp
+$name = ' Hello World ';
+$numbers = [1, 2, 3];
+$price = 19.987;
+
+$name->contains('World');                    // \str_contains($name, 'World')
+$name->trim()->toLower();                    // \Tyhp\StringHelper::strtolower(\trim($name, " \t\n\r\0\x0B"))
+$numbers->mapped(fn(int $n): int => $n * 2); // \array_map(fn(int $n): int => $n * 2, $numbers)
+$price->round(2);                            // \round($price, 2, \PHP_ROUND_HALF_UP)
 ```
 
 ## Extensions
@@ -239,17 +273,21 @@ Add methods and operator overloads to existing types without modifying their sou
 <a href="tyhp_2100_extensions.html">See full documentation →</a>
 
 ```tyhp
-extension StringExtensions extends string {
-    function toCamelCase(): string { ... }
+<?tyhp
+namespace App\Extensions;
+
+extension TextExtensions extends string {
+    function toCamelCase(): string {
+        $words = \explode('_', $this);
+        return \lcfirst(\implode('', \array_map(\ucfirst(...), $words)));
+    }
+
+    fn shout(): string => \strtoupper($this) . '!';
 }
 
-use extension App\Extensions\StringExtensions;
-$text->toCamelCase();  // StringExtensions::toCamelCase($text)
-
-use extension StringOperators {
-    StringOperators::toSnakeCase hide;
-    operator *<string> hide;
-};
+$text = 'hello_world';
+$text->toCamelCase();  // \App\Extensions\TextExtensions::toCamelCase($text)
+$text->shout();        // \strtoupper($text) . '!'
 ```
 
 ## Object Declaration Changes
@@ -292,11 +330,22 @@ Define custom operator behavior on classes and enums. Supports binary, unary, co
 <a href="tyhp_1600_operatorOverloads.html">See full documentation →</a>
 
 ```tyhp
+<?tyhp
 class Vector {
+    public function __construct(public float $x, public float $y): void {}
+
     operator +(self $l, self $r) => new static($l->x + $r->x, $l->y + $r->y);
     operator ==(self $l, self $r) => $l->x === $r->x && $l->y === $r->y;
-    operator convert(int $v) { return new static((float)$v); }
+    operator convert(int $v) { return new static((float)$v, (float)$v); }
 }
+
+function length(Vector $v): float {
+    return \sqrt($v->x ** 2 + $v->y ** 2);
+}
+
+$sum = new Vector(1.0, 2.0) + new Vector(3.0, 4.0);  // \Vector::__add(...)
+$same = $sum == new Vector(4.0, 6.0);                // \Vector::__isEqual(...)
+length(5);                                           // length(\Vector::__from(5))
 ```
 
 ## Trait Requirements
@@ -306,8 +355,22 @@ Traits can declare `extends` and `implements` requirements. Enforced at compile 
 <a href="tyhp_2000_traitRequirements.html">See full documentation →</a>
 
 ```tyhp
-trait Cacheable extends Entity implements Serializable {
-    // can safely use Entity and Serializable members
+<?tyhp
+abstract class Entity {
+    abstract public function getId(): int;
+}
+
+trait Cacheable extends Entity implements \Stringable {
+    public function cacheKey(): string {
+        return static::class . ':' . $this->getId() . ':' . $this->__toString();
+    }
+}
+
+class Product extends Entity implements \Stringable {
+    use Cacheable;
+
+    public function getId(): int { return 7; }
+    public function __toString(): string { return 'product'; }
 }
 ```
 
@@ -318,21 +381,39 @@ Omits the declaration from the published `package.tyhpdef`. Emitted as `public` 
 <a href="tyhp_3100_internalModifier.html">See full documentation →</a>
 
 ```tyhp
-internal class InternalHelper { ... }
-internal function computeHash(string $data): string { ... }
+<?tyhp
+namespace Acme\Lib;
+
+internal class InternalHelper {
+    internal function normalize(string $data): string {
+        return \trim($data);
+    }
+}
+
+internal function computeHash(string $data): string {
+    return \hash('sha256', $data);
+}
+
 internal const MAX_RETRIES = 3;
 ```
 
-## Null-Conditional Assignment (not in this alpha)
+## Null-Conditional Assignment
 
 Assignment through `?->` on the left-hand side. If any `?->` in the chain encounters null, the assignment becomes a no-op. Works with all assignment operators.
 
 <a href="tyhp_3300_nullConditionalAssignment.html">See full documentation →</a>
 
 ```tyhp
-$config?->theme = 'dark';
-$user?->address?->city = 'Berlin';
-$obj?->count += 1;
+<?tyhp
+class Address { public string $city = ''; }
+class User { public ?Address $address = null; }
+class Config { public string $theme = 'light'; public int $count = 0; }
+
+function update(?Config $config, ?User $user): void {
+    $config?->theme = 'dark';
+    $user?->address?->city = 'Berlin';
+    $config?->count += 1;
+}
 ```
 
 ## Disposables and the `:=` Operator
@@ -342,14 +423,32 @@ Deterministic resource management via `IsDisposable`/`AsyncIsDisposable` interfa
 <a href="tyhp_2300_disposables.html">See full documentation →</a>
 
 ```tyhp
-$db := new DatabaseConnection($dsn);
-// $db->dispose() called automatically at scope exit
-
-using ($db = new DatabaseConnection($dsn)) {
-    $db->query('SELECT ...');
+<?tyhp
+class DatabaseConnection implements \Tyhp\Contracts\IsDisposable {
+    public function __construct(string $dsn): void {}
+    public function query(string $sql): void {}
+    public function dispose(): void {}
 }
 
-using await ($conn = new AsyncConnection($url)) { ... }
+function report(string $dsn): void {
+    $db := new DatabaseConnection($dsn);
+    $db->query('SELECT 1');
+    // $db->dispose() is called automatically at scope exit
+
+    using ($conn = new DatabaseConnection($dsn)) {
+        $conn->query('SELECT 2');
+    }
+}
+
+class AsyncConnection implements \Tyhp\Contracts\AsyncIsDisposable {
+    public function __construct(string $url): void {}
+    public async function disposeAsync(): void {}
+}
+
+async function load(string $url): void {
+    using await ($conn = new AsyncConnection($url)) {
+    }
+}
 ```
 
 ## Async and Await
@@ -359,18 +458,39 @@ First-class `async`/`await` using PHP Fibers. An async function's declared retur
 <a href="tyhp_2600_asyncAndAwait.html">See full documentation →</a>
 
 ```tyhp
-async function fetchUser(int $id): User {
+<?tyhp
+use Tyhp\Promise;
+
+class User {
+    public function __construct(public int $id): void {}
+}
+
+class UserRepo {
+    public async function find(int $id): User {
+        return new User($id);
+    }
+}
+
+async function fetchUser(UserRepo $repo, int $id): User {
     return await $repo->find($id);
 }
 
-Promise<int> $pending = async {
-    return await fetchCount();
-};
+async function fetchCount(): int {
+    return 3;
+}
 
-array $results = await Promise::all([$fetchA, $fetchB, $fetchC]);
+async function main(UserRepo $repo): int {
+    Promise<int> $pending = async {
+        return await fetchCount();
+    };
 
-foreach (await $queue->messagesAsync() as Message $msg) {
-    // process messages asynchronously
+    array<User> $users = await Promise::all([
+        fetchUser($repo, 1),
+        fetchUser($repo, 2),
+    ]);
+
+    int $count = await $pending;
+    return \count($users) + $count;
 }
 ```
 
@@ -381,8 +501,24 @@ When a parameter is typed `PropertyPath<callable(T): R>` or `Expression<callable
 <a href="tyhp_3000_parsableLambdas.html">See full documentation →</a>
 
 ```tyhp
-$query->select(fn ($u) => $u->address->city);  // PropertyPath
-$query->where(fn ($u) => $u->age > 18 && $u->isActive); // Expression tree
+<?tyhp
+use Tyhp\Expression;
+use Tyhp\PropertyPath;
+
+type Address = struct { string $city; };
+
+class User {
+    public function __construct(public int $age, public bool $isActive, public Address $address): void {}
+}
+
+class UserQuery {
+    public function select(PropertyPath<callable(User): string> $path): static { return $this; }
+    public function where(Expression<callable(User): bool> $predicate): static { return $this; }
+}
+
+$query = new UserQuery();
+$query->select(fn ($u) => $u->address->city);
+$query->where(fn ($u) => $u->age > 18 && $u->isActive);
 
 Expression<callable(User): bool> $expr = fn ($u) => $u->age > 18;
 ```
@@ -411,12 +547,22 @@ Four compile-time constructs. `nameof` and many `default` / `variable_exists` us
 <a href="tyhp_2700_compileTimeConstructs.html">See full documentation →</a>
 
 ```tyhp
-nameof($user->name);        // 'name' — refactoring-safe string name
-typeof(int);                // \Tyhp\Type::int()
-typeof(UserId);             // UserId()
-typeof(Optional<int>);      // Optional(\Tyhp\Type::int())
-default(int);               // 0 — zero value for a type
-variable_exists($x);        // true/false literal
+<?tyhp
+type UserId = int;
+type Optional<T = mixed> = T|null;
+
+class User {
+    public string $name = 'Ada';
+}
+
+$user = new User();
+
+nameof($user->name);    // 'name'
+typeof(int);            // \Tyhp\Type::int()
+typeof(UserId);         // UserId()
+typeof(Optional<int>);  // Optional(\Tyhp\Type::int())
+default(int);           // 0
+variable_exists($user); // true
 ```
 
 ## Use Statements and Imports
@@ -426,13 +572,36 @@ All PHP `use` forms plus generic import aliases (`use Foo as Bar<int>`), `use ex
 <a href="tyhp_0350_useStatements.html">See full documentation →</a>
 
 ```tyhp
+<?tyhp
+namespace App\Collections;
+
+class TypedList<T> {
+    private array<T> $items = [];
+    public function add(T $item): void { $this->items[] = $item; }
+}
+```
+
+```tyhp
+<?tyhp
+namespace App\Extensions;
+
+extension StringHelpers extends string {
+    fn toCamelCase(): string => \lcfirst(\str_replace('_', '', \ucwords($this, '_')));
+}
+```
+
+```tyhp
+<?tyhp
+namespace App;
+
 use App\Collections\TypedList as IntList<int>;
-IntList $numbers = new IntList();
-
 use extension App\Extensions\StringHelpers;
-$camel = $name->toCamelCase();
 
-global use extension \Tyhp\StringExtensions;
+IntList $numbers = new IntList();
+$numbers->add(42);
+
+$name = 'hello_world';
+$camel = $name->toCamelCase();
 ```
 
 ## The Mixed Type
@@ -448,8 +617,14 @@ Variable variables, variable functions, dynamic property/method access, and dyna
 <a href="tyhp_2400_dynamicLanguageFeatures.html">See full documentation →</a>
 
 ```tyhp
-__ClassName $cls = 'App\\Models\\User';
-if (\class_exists($cls)) {
+<?tyhp
+namespace App\Models;
+
+class User {}
+
+string $name = 'App\\Models\\User';
+if (\class_exists($name)) {
+    __ClassName $cls = $name;
     $obj = new $cls();
 }
 ```
