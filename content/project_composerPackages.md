@@ -8,7 +8,7 @@ status:
 
 Compiled Tyhp programs depend on small Composer packages (`tyhpdef/php`, `tyhp/core`, and others). Those packages **do not** share the compiler version. You can ship a new `tyhp/core` without bumping the Tyhp compiler.
 
-The **compiler** version `805.1.0-beta.3` only means this toolchain can *emit* PHP up through 8.5 (and still emit 8.2–8.4 when `output.phpVersion` says so).
+The **compiler** version `805.1.1-beta.3` only means this toolchain can *emit* PHP up through 8.5 (and still emit 8.2–8.4 when `output.phpVersion` says so).
 
 Each **package** has its own version (in that package’s `composer.json`).
 
@@ -16,7 +16,7 @@ Compiled `tyhp/*` helpers (`core`, `async`, `decimal`, `lambda`, `io`, `parallel
 
 `tyhpdef/*` packages (`tyhpdef/php`, `tyhpdef/php-ext-*`, Composer-lib wrappers) publish that `composer.json` version as the Packagist tag. They do not use `80N.X.Y`.
 
-`tyhp/compiler` is versioned with the compiler itself (`805.1.0-beta.3`), not as `80N.X.Y`. See [The tyhp/compiler Package](package_compiler.md).
+`tyhp/compiler` is versioned with the compiler itself (`805.1.1-beta.3`), not as `80N.X.Y`. See [The tyhp/compiler Package](package_compiler.md).
 
 The compiled helpers currently ship at source version `0.1`, so the Packagist pins look like `804.0.1` for PHP 8.4 `tyhp/core`. If `tyhp/core` later becomes `1.4`, PHP 8.4 apps require `804.1.4` (or `804.1.*`). `tyhp/lambda` can be `2.0` at the same time. `tyhpdef/php` publishes the `version` in its `composer.json` (currently `0.0.2`); put it in `require-dev` as **`@dev`** rather than pinning that tag.
 
