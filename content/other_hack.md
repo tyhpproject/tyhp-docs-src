@@ -38,3 +38,10 @@ Hack has a large engineering team at Meta and introduces many new operators, con
 ## When to Choose Hack
 
 Hack has many strengths. Its type system is mature and battle-tested at Facebook's scale. If you are willing to adopt HHVM as your runtime and your project does not depend heavily on the standard PHP ecosystem, Hack offers a powerful and well-supported language. Tyhp is a different solution: a typed superset that compiles to PHP so you can stay on a PHP runtime and the PHP ecosystem.
+
+## Links
+
+- Hack website: [hacklang.org](https://hacklang.org)
+- HHVM website: [hhvm.com](https://hhvm.com)
+- Documentation: [docs.hhvm.com](https://docs.hhvm.com)
+- Source: [github.com/facebook/hhvm](https://github.com/facebook/hhvm)

@@ -38,3 +38,8 @@ While Tyhp follows the TypeScript model, the differences between PHP and JavaScr
 ## The TypeScript Model
 
 TypeScript showed that a typed-superset approach can work when the tooling is usable, the migration path is gradual, and the output is readable. Tyhp applies that model to PHP’s runtime and ecosystem, not a feature-for-feature copy of TypeScript.
+
+## Links
+
+- Website: [typescriptlang.org](https://www.typescriptlang.org)
+- Source: [github.com/microsoft/TypeScript](https://github.com/microsoft/TypeScript)

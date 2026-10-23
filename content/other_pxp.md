@@ -4,6 +4,10 @@ title: PXP
 
 PXP is a project that adds syntax on top of PHP and compiles the result to PHP. Tyhp is also a superset of the PHP language that compiles to PHP. The two differ in scope, approach, and focus.
 
+:::note
+PXP is no longer under active development. Its author announced the end of the project in March 2025 and archived the repository.
+:::
+
 ## What PXP Is
 
 PXP (pxp-lang) is an open-source project that provides a Rust-based parser and compiler for an extended PHP syntax. It began as a high-performance PHP parser and has grown into a language project that adds features like generics to PHP. PXP's tooling infrastructure — parser, AST, and formatter — is written in Rust, giving it strong performance characteristics for parsing and analysis.
@@ -28,3 +32,8 @@ PXP (pxp-lang) is an open-source project that provides a Rust-based parser and c
 ## Complementary Strengths
 
 PXP's Rust-based parser is aimed at PHP-adjacent tooling. Tyhp is a language with a type checker, compiler pipeline, runtime packages, and development tools. Both compile to PHP.
+
+## Links
+
+- Source (archived): [github.com/ryangjchandler/pxp](https://github.com/ryangjchandler/pxp)
+- Announcement: [Saying goodbye to PXP](https://ryangjchandler.co.uk/posts/saying-goodbye-to-pxp)

@@ -27,3 +27,8 @@ Tyhp and ReactPHP are complementary rather than competing technologies:
 :::note
 ReactPHP is not the only async runtime compatible with Tyhp. Any PHP library that works with Fibers or provides an event loop can serve as the runtime backing for Tyhp's compiled async code.
 :::
+
+## Links
+
+- Website: [reactphp.org](https://reactphp.org)
+- Source: [github.com/reactphp](https://github.com/reactphp)
