@@ -8,7 +8,7 @@ status:
 
 Tyhp is built in a deliberately ordered sequence of stories, grouped into four tiers. The guiding principle is a thin vertical slice that compiles and runs end-to-end as early as possible.
 
-**This beta (805.1.1-beta.3)** Stories **27** (object shapes), **27.1** (callable shapes + `type Name = struct { };`), **27.2** (block-target extension syntax), and **27.3** (split runtime / docs / AI developer guide / IDE plugin into dedicated git repos) are next, still in this beta, before deferred Story 22. Other stories remain planned unless noted below.
+**This beta (805.1.2-beta.3)** Stories **27** (object shapes), **27.1** (callable shapes + `type Name = struct { };`), **27.2** (block-target extension syntax), and **27.3** (split runtime / docs / AI developer guide / IDE plugin into dedicated git repos) are next, still in this beta, before deferred Story 22. Other stories remain planned unless noted below.
 
 Stories are numbered contiguously from 01 to 30 with additive sub-stories (`08.5`, `10.5`, `14.5`, `16.5`, `19.5`, `20.5`, `27.1`, `27.2`, `27.3`). Each documentation page carries a Tier/Story badge.
 
