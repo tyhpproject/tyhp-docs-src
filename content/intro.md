@@ -28,9 +28,12 @@ All type checking in Tyhp happens at compile time. Tyhp-only type syntax is eras
 
 ## Why Tyhp
 
-Tyhp does not replace the PHP runtime. You compile Tyhp to PHP, then deploy on the PHP you already run. The compiler checks types, nullability, and generic constraints before that output is written.
+PHP checks type declarations when the code runs. Static analyzers such as PHPStan and Psalm catch more before that, but generics, array shapes, and similar types live in PHPDoc comments, and their findings can be ignored or baselined.
 
-- Types are compile-time — hints erase; hooks, async, structs, and remaining `Type::is` still emit Tyhp-runtime PHP
+Tyhp makes those types part of the language. The compiler checks types, nullability, and generic constraints, and does not emit PHP until the program type-checks. Tyhp does not replace the PHP runtime: you deploy the compiled output on the PHP you already run.
+
+- Build-time errors — type and null errors are reported before the code runs
+- Types in the syntax — generics, structs, and type aliases are part of the language, not PHPDoc comments
 - Gradual adoption — mix `.tyhp` and `.php` files in the same project
 - PHP interop — Composer packages and PHP extensions via tyhpdef files
 - Readable output — emitted PHP is meant to be readable
@@ -39,6 +42,17 @@ Tyhp does not replace the PHP runtime. You compile Tyhp to PHP, then deploy on t
 ## How It Works
 
 The Tyhp compiler processes your source files through a multi-phase pipeline: parsing, binding (symbol and scope resolution), type checking, and emission. Each phase catches different categories of errors. The emitter lowers Tyhp-specific constructs into PHP: structs become arrays, `async`/`await` become `Promise::_async` / `_await`, property hooks polyfill when the target is below PHP 8.4, and the rest maps to ordinary PHP or small `\Tyhp\` helpers. The output runs on a standard PHP runtime.
+
+## How Tyhp Compares
+
+Several projects add types to PHP in different ways:
+
+- [FAQ: General](faq_general.md) — PHPStan and Psalm
+- [Hack / HHVM](other_hack.md)
+- [TypePHP (Swoole AOT)](other_typephp.md)
+- [PXP](other_pxp.md)
+- [ReactPHP](other_reactphp.md) — async
+- [TypeScript](other_typescript.md)
 
 :::note
 This documentation is written for experienced PHP developers. Familiarity with PHP syntax, object-oriented programming, and Composer is assumed.
