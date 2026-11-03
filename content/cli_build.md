@@ -75,7 +75,7 @@ The build action reads configuration from the tyhp.json project file. Key config
 - build.generateTyhpdef — For **applications**, write `package.tyhpdef` in the publish directory when `true`. **Libraries always emit** `package.tyhpdef` and additive-merge `extra.tyhp.package` on publish-directory `composer.json`; this key is ignored for `"type": "library"`.
 - build.updateComposer — Generate or update composer.json in `output.publishPath` with PSR-4 autoloading for the compiled PHP (default: false).
 - build.allowEval — Re-enable the eval() function, which is disabled by default in Tyhp (default: false).
-- build.experimentalReadonlyCloneWith — Allow `clone ... with` on `readonly` properties for PHP 8.2–8.4 (default: false). PHP 8.5+ does not need this flag.
+- build.experimentalReadonlyCloneWith — Allow `clone ... with` on `readonly` properties of a class that is not `readonly`, for PHP 8.3–8.4 (default: false). PHP 8.5+ does not need this flag. Below 8.3 the form reports TYHP4400. A `readonly class` below 8.5 reports TYHP4401.
 - build.runtimeGenericChecks — Emit runtime type checks at generic boundaries (default: false).
 - build.entryPointAutoloader — Optional map of named autoloader paths injected into entry points.
 - psr4 — PSR-4 namespace-to-directory mappings for the output.

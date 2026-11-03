@@ -121,6 +121,11 @@ The code uses a PHP language construct that the Tyhp compiler does not yet suppo
 Fix: Use an alternative approach that is supported by the compiler. Check the Tyhp documentation for supported constructs and any known limitations.
 :::
 
+:::member[TYHP2005 (Error)]
+**PhpOpenTagNotAllowedInTyhpFile.** Message: <code>`&lt;?php` is not allowed in a `.tyhp` file; put PHP code in a `.php` file</code>.
+Run <code>tyhp --explain TYHP2005</code> for the long-form explanation.
+:::
+
 
 ## Binder Errors (TYHP3xxx)
 
@@ -2643,6 +2648,56 @@ final class Point {
 **CheckerEnumDebugInfoRequiresPhp86.** Message: <code>`__debugInfo()` on enum `{0}` requires PHP `8.6` or later; target is `{1}`</code>.
 
 PHP 8.6 lets an enum declare `__debugInfo()`, which controls what `var_dump()` shows for its cases. Earlier PHP versions reject the enum when it is loaded ("cannot include magic method __debugInfo"), so Tyhp reports this error when `output.phpVersion` is below 8.6. The other magic methods PHP does not allow on enums are TYHP4024 at every target.
+:::
+
+:::member[TYHP4380 (Error)]
+**CheckerReadonlyClassTraitProperty.** Message: <code>Readonly class `{0}` cannot use trait with non-readonly property `{1}::{2}`</code>.
+
+A `readonly class` may use a trait only when every property the trait contributes is a readonly instance property. PHP rejects the class when it is loaded if the trait declares a property without `readonly`, or a static property (a static property cannot be readonly). The same trait is fine on a class that is not readonly.
+
+This is reported when `output.phpVersion` is 8.2 or newer, the versions that have readonly classes. Mark the trait property `readonly`, or move a static property to a class that is not readonly.
+
+```tyhp
+<?tyhp
+trait Counts {
+    public readonly int $hits;
+}
+
+readonly class UsesCounts {
+    use Counts;
+
+    public function __construct() {
+        $this->hits = 0;
+    }
+}
+```
+:::
+
+:::member[TYHP4400 (Error)]
+**CheckerReadonlyWithRequiresPhp83.** Message: <code>Readonly `with` on property `{0}` requires PHP `8.3` or later; target is `{1}`</code>.
+
+PHP 8.3 lets `__clone()` assign a readonly property again. That is how `new … with` on a readonly property is lowered when `output.phpVersion` is below 8.5, and how experimental `clone … with` is lowered for a class that is not readonly. PHP 8.2 rejects the assignment ("Cannot modify readonly property") and cannot parse `new readonly class`, so Tyhp reports this error instead of emitting code that fails when it runs.
+
+Raise `output.phpVersion` to 8.3 or newer, or pass the final values to the constructor.
+
+```tyhp
+<?tyhp
+class Color {
+    public function __construct(public readonly int $alpha) {}
+}
+
+function make(): Color {
+    return new Color(128);
+}
+```
+:::
+
+:::member[TYHP4401 (Error)]
+**CheckerReadonlyClassCloneWithRequiresPhp85.** Message: <code>Clone `with` on readonly class `{0}` requires PHP `8.5` or later; target is `{1}`</code>.
+
+Below PHP 8.5, `clone … with` on a readonly property is lowered to a subclass that applies the new values from `__clone()`. A `readonly class` can only be extended by another readonly class, and that subclass cannot store the override list (a readonly class cannot declare a static property or a mutable one). PHP 8.5 `clone($obj, […])` does not need the subclass.
+
+Raise `output.phpVersion` to 8.5. `new … with` on the same class is available from PHP 8.3.
 :::
 
 :::member[TYHP4500 (Warning)]

@@ -76,7 +76,7 @@ Type: `array<string>`. Glob patterns for files to exclude from the project. File
 :::
 
 :::member[source.tagless]
-Type: `bool` (default: `false`). When true, `.tyhp` and `.tyhpdef` files are parsed without requiring `<?tyhp` / `<?tyhpdef`. Closing `?>` is an error in this mode. Nested as `"source": { "tagless": true }`.
+Type: `bool` (default: `false`). When true, `.tyhp` and `.tyhpdef` files are parsed without requiring `<?tyhp` / `<?tyhpdef`. Closing `?>` is an error in a tagless file, except in a `.tyhp` file whose first six characters are `<?tyhp`, which is parsed as a normal tagged `.tyhp` file (a template). Nested as `"source": { "tagless": true }`.
 :::
 
 ## Output Options
@@ -160,7 +160,7 @@ Type: `bool` (default: `false`). When true, re-enables `eval()` usage in Tyhp co
 :::
 
 :::member[build.experimentalReadonlyCloneWith]
-Type: `bool` (default: `false`). When true, allows `clone ... with` on `readonly` properties for PHP 8.2–8.4 by emitting a compiler wrapper. PHP 8.5+ supports this natively and does not need the flag. `new ... with` on `readonly` never requires it. In-place `$obj with [...]` still cannot set `readonly` after construction.
+Type: `bool` (default: `false`). When true, allows `clone ... with` on `readonly` properties of a class that is not `readonly` for PHP 8.3–8.4 by emitting a compiler wrapper. PHP 8.5+ supports this natively and does not need the flag. Below 8.3 the form reports TYHP4400 even with the flag. `clone ... with` on a `readonly class` below 8.5 reports TYHP4401. `new ... with` on `readonly` never requires the flag; below 8.3 it reports TYHP4400. In-place `$obj with [...]` still cannot set `readonly` after construction.
 :::
 
 :::member[build.runtimeGenericChecks]

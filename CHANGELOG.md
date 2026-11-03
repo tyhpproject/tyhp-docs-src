@@ -18,10 +18,12 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ### Changed
 
+- The Open Tag page and Project Options: in a tagless project, a `.tyhp` file starting with `<?tyhp` is a tagged template (an empty first section is allowed, then inline HTML and `<?=` in source order, including inside a function or control-flow block, and a later `<?tyhp`). Any other `.tyhp` file is parsed with no open tag, so `<?tyhp` there is not accepted. `<?php` blocks report TYHP2005.
+- The with Keyword, Build Configuration, Project Options, and PHP Magic Methods: readonly `new … with` and `clone … with` below PHP 8.3 report TYHP4400; `clone … with` on a `readonly class` below 8.5 reports TYHP4401. The experimental flag covers PHP 8.3–8.4 on a class that is not readonly. Diagnostic Code Reference regenerated, including TYHP4400 and TYHP4401.
 - Roadmap: Tier 2 is marked done, Tier 3 adds promise interop, a new Future Plans section lists unscheduled features, and the runtime package list includes `tyhp/io`, `tyhp/parallel`, `tyhp/compiler`, and the `tyhpdef/php-ext-*` packages.
 - Parsable Lambdas and Expression Trees: compiled PHP examples show the fluent `\Tyhp\Expr` / `PropertyPath::on()` output, generic `R` inference covers `PropertyPath`, and the TYHP4322 table lists the newly rejected constructs (a class held in a variable, a variable method name, named and unpacked arguments, array spread).
 - Interop Contract (CLI): the expression-tree emit section describes the fluent builder output, and `\Tyhp\PropertyType` is listed as a runtime-visible attribute.
-- Diagnostic Code Reference: regenerated, with entries for TYHP4198, TYHP4199, TYHP4378, TYHP4379, TYHP5024, and TYHP7108, updated text for TYHP4011, TYHP4021, TYHP4024, TYHP4101, TYHP4109, and TYHP4322, and TYHP4108 removed.
+- Diagnostic Code Reference: regenerated, with entries for TYHP2005, TYHP4198, TYHP4199, TYHP4378, TYHP4379, TYHP4380, TYHP5024, and TYHP7108, updated text for TYHP4011, TYHP4021, TYHP4024, TYHP4101, TYHP4109, and TYHP4322, and TYHP4108 removed.
 - The with Keyword: the readonly section states that every instance property of a `readonly class`, including promoted parameters, follows the readonly rules.
 - The tyhp/async Package: `EventLoop::run()` infers its result from the root promise, including `Promise<void>`.
 - Installing Tyhp: `tyhpdef/php` is described as covering PHP 8.2–8.5 with version-gated declarations, not as a PHP 8.2 baseline, and non-core extensions are pointed to the `tyhpdef/php-ext-*` packages.

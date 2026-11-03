@@ -49,7 +49,35 @@ The compiler uses the file extension to determine how to parse the file. A `.tyh
 
 ## Tagless source (`source.tagless`)
 
-Set `"source": { "tagless": true }` in `tyhp.json` (or `source.tagless` on a package's `extra.tyhp.package`) to parse `.tyhp` / `.tyhpdef` files as Tyhp/tyhpdef from the first token, without an open tag. Closing `?>` is not allowed in that mode. Use this for files that are entirely Tyhp (no interleaved HTML). The default remains tagged `<?tyhp` / `<?tyhpdef` files.
+Set `"source": { "tagless": true }` in `tyhp.json` (or `source.tagless` on a package's `extra.tyhp.package`) to parse `.tyhp` / `.tyhpdef` files as Tyhp/tyhpdef from the first token, without an open tag. A `.tyhp` code file in a tagless project omits `<?tyhp`. A `.tyhpdef` file cannot contain `?>`. The default remains tagged `<?tyhp` / `<?tyhpdef` files.
+
+### Templates in a tagless project
+
+In a tagless project, a `.tyhp` file whose first six characters are exactly `<?tyhp` is parsed as a normal tagged `.tyhp` file. Any other `.tyhp` file is code and is parsed with no open tag. A blank line or any text before `<?tyhp` keeps that entry, so `<?tyhp` is not accepted there. A leading `<div>` or `<?=` is a syntax error.
+
+A template can therefore have an empty first section (`<?tyhp ?>` or `<?tyhp?>`). After `?>` the file can hold inline HTML and `<?= … ?>`, and `<?tyhp` opens another section later. Inline HTML and echoes are emitted in source order, including inside functions and control-flow blocks, and the `<?=` expressions are type-checked. A `<?php` block in a `.tyhp` file is an error (TYHP2005).
+
+```tyhp
+<?tyhp
+string $title = 'Hello';
+int $count = 3;
+?>
+<h1><?= $title ?></h1>
+<p><?= $count ?></p>
+<?tyhp
+echo $title;
+```
+
+```tyhp
+<?tyhp ?>
+<h1>Hello</h1>
+<?tyhp
+int $count = 3;
+?>
+<p><?= $count ?></p>
+```
+
+A file that starts with anything else, including a blank line, is parsed as code with no open tag. `<?tyhp` in that file is not an open tag. A file that starts with `<div>` or `<?=` and has no leading `<?tyhp` is a syntax error. A file that starts with `<?tyhp` and never closes it is code. `<?php` in a `.tyhp` file is an error in every mode (TYHP2005).
 
 ## Strict Types Are Always Enabled
 

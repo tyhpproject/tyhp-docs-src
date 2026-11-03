@@ -338,7 +338,7 @@ class Child extends Base {
 
 ## __clone and the with Keyword
 
-`clone ... with` on `readonly` properties does not require you to write `__clone()`. On PHP 8.5+ the compiler emits native `clone($obj, [...])`. On PHP 8.2–8.4 it uses a compiler-generated wrapper (opt-in via `build.experimentalReadonlyCloneWith`). You can still write your own `__clone()` for other clone-time work.
+`clone ... with` on `readonly` properties does not require you to write `__clone()`. On PHP 8.5+ the compiler emits native `clone($obj, [...])`. On PHP 8.3–8.4, for a class that is not `readonly`, it uses a compiler-generated wrapper (opt-in via `build.experimentalReadonlyCloneWith`). Below 8.3 that form reports TYHP4400. `clone ... with` on a `readonly class` below 8.5 reports TYHP4401. You can still write your own `__clone()` for other clone-time work.
 
 ```tyhp
 <?tyhp
@@ -391,12 +391,12 @@ Returning a non-string value from __toString(). The compiler enforces that __toS
 :::
 
 :::danger
-Assuming `clone ... with` on `readonly` works on PHP 8.2–8.4 without `build.experimentalReadonlyCloneWith: true`. Enable that flag, or target PHP 8.5+.
+Assuming `clone ... with` on `readonly` works below PHP 8.5 without `build.experimentalReadonlyCloneWith: true`. On 8.3–8.4, enable that flag for a class that is not `readonly`, or target PHP 8.5+. Below 8.3 it reports TYHP4400. A `readonly class` below 8.5 reports TYHP4401.
 :::
 
 ## Compiled PHP Output
 
-Magic methods compile to standard PHP magic methods. The compiler does not transform the magic method signatures or bodies — they pass through to PHP directly. The only additions are auto-generated generic-tracking members when needed (`HasGenerics` trait, `__initGenerics__tyhpGeneric`). Property hooks on `output.phpVersion` below 8.4 emit the `UsesPropertyAccessors` polyfill rather than native PHP 8.4 hook syntax. Readonly `clone ... with` on PHP &lt; 8.5 may emit a separate wrapper, not a replacement of your own `__clone()`.
+Magic methods compile to standard PHP magic methods. The compiler does not transform the magic method signatures or bodies — they pass through to PHP directly. The only additions are auto-generated generic-tracking members when needed (`HasGenerics` trait, `__initGenerics__tyhpGeneric`). Property hooks on `output.phpVersion` below 8.4 emit the `UsesPropertyAccessors` polyfill rather than native PHP 8.4 hook syntax. Readonly `clone ... with` on PHP 8.3–8.4 may emit a separate wrapper, not a replacement of your own `__clone()`.
 
 ```tyhp
 <?tyhp

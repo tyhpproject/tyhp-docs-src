@@ -93,11 +93,12 @@ return \Tyhp\ObjectHelper::with(clone $cfg, ['enabled' => false]);
 return \Tyhp\ObjectHelper::with(new Widget(), ['color' => "blue"]);
 ```
 
-**Readonly `clone ... with` on PHP 8.2–8.4** (requires `build.experimentalReadonlyCloneWith: true`) emits a reflection IIFE: an anonymous subclass with `$__tyhp_overrides`, `ReflectionClass::newInstanceWithoutConstructor()`, a property copy via `ReflectionObject`, then `clone $__wrapper`. It is not a simple `__clone()` wrapper around the source object.
+**Readonly `clone ... with` on PHP 8.3–8.4** (requires `build.experimentalReadonlyCloneWith: true`, and the class must not be `readonly`) emits a reflection IIFE: an anonymous subclass with an empty constructor, `ReflectionClass::newInstanceWithoutConstructor()`, a property copy via `ReflectionObject`, overrides on a static `$__tyhp_overrides` stack, then `clone $__wrapper`. Below 8.3 this is TYHP4400. On a `readonly class` below 8.5 it is TYHP4401.
 
 **Readonly `new ... with`:**
 
-- PHP 8.2–8.4: `clone (new class(...) extends \Color { public function __clone(): void { ... } })`
+- Below PHP 8.3: TYHP4400 (the `__clone()` wrapper cannot assign a readonly property, and `new readonly class` does not parse)
+- PHP 8.3–8.4: `clone (new class(...) extends \Color { public function __clone(): void { ... } })`, or `new readonly class(...) extends` when the class is `readonly`
 - PHP 8.5: `clone(new Color(), ['alpha' => 128])`
 
 ## In-Place with on an Existing Instance
@@ -220,7 +221,7 @@ $app->config = \Tyhp\ObjectHelper::with(clone $defaultConfig, ['debug' => true, 
 
 `readonly` properties cannot be assigned after construction. `new ... with` and `clone ... with` are allowed to set them on the new or cloned instance. Direct assignment and in-place `$obj with [...]` after construction are not. Every instance property of a `readonly class`, including promoted constructor parameters, follows these rules whether or not it repeats `readonly`.
 
-On PHP 8.5+, `clone ... with` uses native `clone($obj, [...])`. On PHP 8.2–8.4, `clone ... with` on `readonly` properties requires `build.experimentalReadonlyCloneWith: true` in `tyhp.json` (the compiler emits a reflection IIFE: `newInstanceWithoutConstructor`, `$__tyhp_overrides`, then `clone $__wrapper` — not a simple `__clone()` wrapper around the source). `new ... with` on `readonly` does not need that flag (PHP 8.4 emits an anonymous class with `__clone()`; PHP 8.5 uses `clone(new Color(), [...])`). `readonly` plus `with` is the immutable-update pattern.
+On PHP 8.5+, `clone ... with` uses native `clone($obj, [...])`. On PHP 8.3–8.4, `clone ... with` on `readonly` properties of a class that is not `readonly` requires `build.experimentalReadonlyCloneWith: true` in `tyhp.json` (the compiler emits a reflection IIFE: an empty subclass constructor, `newInstanceWithoutConstructor`, a static `$__tyhp_overrides` stack, then `clone $__wrapper`). Below 8.3 that form reports TYHP4400. `clone ... with` on a `readonly class` below 8.5 reports TYHP4401. `new ... with` on `readonly` does not need the flag; below 8.3 it reports TYHP4400, and on 8.3–8.4 it emits an anonymous class with `__clone()` (`new readonly class` when the class is `readonly`). PHP 8.5 uses `clone(new Color(), [...])`. `readonly` plus `with` is the immutable-update pattern.
 
 :::member[(no modifier)]
 Set in constructor: Yes. Set after construction: Yes. Set via `new`/`clone` with: Yes. Set via in-place with: Yes.
@@ -361,13 +362,15 @@ $c = clone $a with [name => 'Bob'];
 ```
 
 :::warning
-On PHP 8.2–8.4, `clone ... with` on `readonly` properties requires `build.experimentalReadonlyCloneWith: true` in `tyhp.json`. PHP 8.5+ supports it natively. `new ... with` on readonly does not need the flag.
+On PHP 8.3–8.4, `clone ... with` on `readonly` properties of a class that is not `readonly` requires `build.experimentalReadonlyCloneWith: true` in `tyhp.json`. Below 8.3 it reports TYHP4400. `clone ... with` on a `readonly class` below 8.5 reports TYHP4401. PHP 8.5+ supports `clone ... with` natively. `new ... with` on readonly does not need the flag; below 8.3 it reports TYHP4400.
 :::
 
 ## Compiler Errors
 
 - Setting a readonly property via in-place `$obj with [...]` after construction.
-- `clone ... with` on a readonly property on PHP &lt; 8.5 without `build.experimentalReadonlyCloneWith`.
+- `clone ... with` on a readonly property on PHP 8.3–8.4 without `build.experimentalReadonlyCloneWith`.
+- Readonly `new ... with` or `clone ... with` when `output.phpVersion` is below 8.3 (TYHP4400).
+- `clone ... with` on a `readonly class` when `output.phpVersion` is below 8.5 (TYHP4401).
 - Setting a non-existent property via with.
 - Setting a private or protected property via with from outside the class.
 - Applying with to an expression that is not a new expression, a clone expression, or an addressable object/struct instance.
