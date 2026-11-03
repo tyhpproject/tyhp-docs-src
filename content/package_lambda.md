@@ -42,7 +42,10 @@ Tyhp\Expression\ExpressionNode             abstract base: $type, $nodeType, acce
 ├── ArrayAccessExpression                  $u->tags[0]
 ├── CastExpression                         (string) $u->age
 ├── NewExpression                          new Address($u->city)
-└── InstanceofExpression                   $u->address is Address
+├── InstanceofExpression                   $u->address is Address
+├── NullSafeMethodCallExpression           $u->address?->format()
+├── ArrayExpression                        ['id' => $u->id, $u->name] (items are ArrayItem)
+└── LambdaExpression                       fn ($p) => $p->rating > 3, nested in a body
 ```
 
 Trees reach your code in one of four ways:
@@ -574,6 +577,9 @@ The "Produced by" column describes what the compiler emits for an `fn` passed to
 | `CastExpression` | `cast` | `(int)`, `(string)`, `(float)`, `(bool)`, `(array)`, `(object)`, `(decimal)` | `targetType`, `operand` | `visitCast` |
 | `NewExpression` | `new` | `new Cls(...)` | `class`, `arguments` | `visitNew` |
 | `InstanceofExpression` | `instanceof` | `$x instanceof T`, `$x is T` | `operand`, `targetType` | `visitInstanceof` |
+| `NullSafeMethodCallExpression` | `nullSafeMethodCall` | `$x?->method(...)` | `object`, `method`, `arguments` | `visitNullSafeMethodCall` |
+| `ArrayExpression` | `array` | `[$a, 'k' => $b]`, `array(...)` | `items` (`ArrayItem`: `key`, `value`) | `visitArray` |
+| `LambdaExpression` | `lambda` | a nested arrow `fn` | `parameters`, `body`, `returnType` | `visitLambda` |
 
 Parentheses do not produce nodes. `($u->age + 1) * 2` is a `BinaryExpression` for `*` whose left child is the `BinaryExpression` for `+`.
 
@@ -591,7 +597,7 @@ readonly public int $index;
 
 A use of a lambda parameter. `$name` is the parameter name without `$`, `$paramType` is its type as a string, and `$index` is its zero-based position. `$type` equals `$paramType`.
 
-In compiler-built `Expression` trees, `$name` is the name you wrote (`u` for `fn ($u) => …`). In `PropertyPath` and builder trees it is always `source`. Each occurrence in the body is a separate object, so compare parameters by `$index`.
+In compiler-built `Expression` trees, `$name` is the name you wrote (`u` for `fn ($u) => …`). In `PropertyPath` and builder trees it is always `source`. Each occurrence in the body is a separate object, so compare parameters by `$index`. Inside a nested `LambdaExpression`, a parameter belongs to the nearest enclosing `LambdaExpression` that declares its `$name`, and `$index` is its position in that nested `fn`; a name no nested `fn` declares is the outer lambda's parameter.
 :::
 
 ### PropertyAccessExpression
@@ -619,7 +625,7 @@ readonly public ExpressionNode $object;
 readonly public string $property;
 ```
 
-A null-safe property read, `$object?->property`. Only the segment written with `?->` gets this class: `$u->address?->city` is a `NullSafeAccessExpression` for `city` whose `object` is a plain `PropertyAccessExpression` for `address`. A SQL translator typically treats it like a property read; an in-memory evaluator returns `null` when `$object` evaluates to `null`.
+A null-safe property read, `$object?->property`. Only the segment written with `?->` gets this class: `$u->address?->city` is a `NullSafeAccessExpression` for `city` whose `object` is a plain `PropertyAccessExpression` for `address`. A SQL translator typically treats it like a property read. When evaluated, a `null` `$object` makes the rest of the chain `null` without reading it, as PHP does: in `$u->address?->city->name`, a missing address gives `null` rather than reading `name` on `null`.
 :::
 
 ### MethodCallExpression
@@ -795,6 +801,49 @@ A type test, `$operand instanceof T` or `$operand is T`; both spellings produce 
 - the runtime value of the variable for `$x instanceof $className`.
 :::
 
+### NullSafeMethodCallExpression
+
+:::member[final class NullSafeMethodCallExpression extends ExpressionNode]
+```tyhp
+<?tyhp
+
+public function __construct(ExpressionNode $object, string $method, array<ExpressionNode> $arguments, string $type = 'mixed'): void
+readonly public ExpressionNode $object;
+readonly public string $method;
+readonly public array<ExpressionNode> $arguments;
+```
+
+A null-safe method call, `$object?->method(...$arguments)`. When evaluated, a `null` `$object` gives `null` without evaluating the arguments or the rest of the chain.
+:::
+
+### ArrayExpression
+
+:::member[final class ArrayExpression extends ExpressionNode]
+```tyhp
+<?tyhp
+
+public function __construct(array<ArrayItem> $items, string $type = 'array'): void
+readonly public array<ArrayItem> $items;
+```
+
+An array literal. Each `ArrayItem` has `readonly ?ExpressionNode $key` and `readonly ExpressionNode $value`; a `null` key takes the next integer key, as in `[$a, $b]`. `['id' => $u->id, $u->name]` has two items: key `ConstantExpression('id')` with the `id` read, then a `null` key with the `name` read. Keys are evaluated before their values.
+:::
+
+### LambdaExpression
+
+:::member[final class LambdaExpression extends ExpressionNode]
+```tyhp
+<?tyhp
+
+public function __construct(array<ParameterExpression> $parameters, ExpressionNode $body, string $returnType = 'mixed'): void
+readonly public array<ParameterExpression> $parameters;
+readonly public ExpressionNode $body;
+readonly public string $returnType;
+```
+
+A nested arrow `fn` inside a tree body, usually a method argument: `$b->posts->any(fn ($p) => $p->rating > 3)`. `$parameters` are the nested `fn`'s own parameters, with `index` counted within the nested `fn`. A `ParameterExpression` in `$body` belongs to the nearest enclosing `LambdaExpression` that declares its name, and otherwise to the outer lambda. `$type` is `'Closure'`: evaluating the node gives a `\Closure` that evaluates `$body`.
+:::
+
 ## Walking and translating trees
 
 ### ExpressionVisitor
@@ -826,12 +875,15 @@ Dispatches to the visitor method for `$node`'s class and returns that method's r
 | `visitCast(CastExpression $node): mixed` | `CastExpression` |
 | `visitNew(NewExpression $node): mixed` | `NewExpression` |
 | `visitInstanceof(InstanceofExpression $node): mixed` | `InstanceofExpression` |
+| `visitNullSafeMethodCall(NullSafeMethodCallExpression $node): mixed` | `NullSafeMethodCallExpression` |
+| `visitArray(ArrayExpression $node): mixed` | `ArrayExpression` |
+| `visitLambda(LambdaExpression $node): mixed` | `LambdaExpression` |
 
 All visitor methods are `public` and return `mixed`, so a visitor can produce any kind of result: SQL strings, a new tree, a validation rule, a boolean.
 
 ### Walking every node
 
-Sometimes you need every node rather than a translation: to collect the properties a predicate uses, to find captured values, or to print a tree while debugging. A small helper that lists each node's children, plus a recursive walk, covers all fourteen node types:
+Sometimes you need every node rather than a translation: to collect the properties a predicate uses, to find captured values, or to print a tree while debugging. A small helper that lists each node's children, plus a recursive walk, covers all seventeen node types:
 
 ```tyhp
 <?tyhp
@@ -840,14 +892,17 @@ namespace App;
 
 use Tyhp\Expression;
 use Tyhp\Expression\ArrayAccessExpression;
+use Tyhp\Expression\ArrayExpression;
 use Tyhp\Expression\BinaryExpression;
 use Tyhp\Expression\CastExpression;
 use Tyhp\Expression\CoalesceExpression;
 use Tyhp\Expression\ExpressionNode;
 use Tyhp\Expression\InstanceofExpression;
+use Tyhp\Expression\LambdaExpression;
 use Tyhp\Expression\MethodCallExpression;
 use Tyhp\Expression\NewExpression;
 use Tyhp\Expression\NullSafeAccessExpression;
+use Tyhp\Expression\NullSafeMethodCallExpression;
 use Tyhp\Expression\PropertyAccessExpression;
 use Tyhp\Expression\StaticMethodCallExpression;
 use Tyhp\Expression\TernaryExpression;
@@ -867,7 +922,7 @@ final class ExpressionTree {
         if ($node is ArrayAccessExpression) {
             return [$node->array, $node->index];
         }
-        if ($node is MethodCallExpression) {
+        if ($node is MethodCallExpression || $node is NullSafeMethodCallExpression) {
             return [$node->object, ...$node->arguments];
         }
         if ($node is StaticMethodCallExpression || $node is NewExpression) {
@@ -880,6 +935,19 @@ final class ExpressionTree {
             }
             $parts[] = $node->ifFalse;
             return $parts;
+        }
+        if ($node is ArrayExpression) {
+            array<ExpressionNode> $parts = [];
+            foreach ($node->items as $item) {
+                if ($item->key !== null) {
+                    $parts[] = $item->key;
+                }
+                $parts[] = $item->value;
+            }
+            return $parts;
+        }
+        if ($node is LambdaExpression) {
+            return [$node->body];
         }
         return [];   // ParameterExpression and ConstantExpression are leaves
     }
@@ -1239,6 +1307,10 @@ The JSON is a description for other programs to read. The receiving side decodes
 | `SerializedCastExpression` | `string $targetType = ''`, `SerializedExpression $operand` |
 | `SerializedNewExpression` | `string $class = ''`, `array<SerializedExpression> $arguments = []` |
 | `SerializedInstanceofExpression` | `SerializedExpression $operand`, `string $targetType = ''` |
+| `SerializedNullSafeMethodCallExpression` | `SerializedExpression $object`, `string $method = ''`, `array<SerializedExpression> $arguments = []` |
+| `SerializedArrayExpression` | `array<SerializedArrayItem> $items = []` |
+| `SerializedArrayItem` | `?SerializedExpression $key = null`, `SerializedExpression $value` (not a node; no `nodeType` or `type`) |
+| `SerializedLambdaExpression` | `string $returnType = ''`, `array<SerializedExpression> $parameters = []`, `SerializedExpression $body` |
 
 See [Structs](tyhp_0400_structs.md) for how struct types work.
 

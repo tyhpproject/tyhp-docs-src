@@ -87,7 +87,7 @@ Reads the property chain from `$source` and returns the value. For a null-safe c
 
 ## PropertyPath Compiled PHP Output
 
-When you pass an `fn` expression to a `PropertyPath` parameter, the compiler emits a `\Tyhp\PropertyPath` construction. The original `fn` is included as the callable argument so the path can be executed directly.
+When you pass an `fn` expression to a `PropertyPath` parameter, the compiler emits a `\Tyhp\PropertyPath::on(...)` chain with one step per property. `backedBy(...)` receives the original `fn`, so the path can be executed directly and its result type comes from the closure's return type.
 
 ```tyhp
 <?tyhp
@@ -98,12 +98,7 @@ $columns->select(fn ($u) => $u->address->city);
 ```php
 <?php
 
-$columns->select(\Tyhp\Generic::bind(\Tyhp\PropertyPath::class, null)(
-    \User::class,
-    'string',
-    ['address', 'city'],
-    fn(\User $u): string => $u->address->city
-));
+$columns->select(\Tyhp\PropertyPath::on(\User::class)->address->city->backedBy(fn(\User $u): string => $u->address->city));
 ```
 
 ## Nullable Property Chains
@@ -138,18 +133,12 @@ Output:
 billing.city
 ```
 
-The emitted construction passes `nullSafeFlags`, which records whether each link used `?->`. The expression tree then contains `NullSafeAccessExpression` nodes for those links rather than plain property access:
+The emitted chain has a `nullSafe()` step before each property read through `?->`. The expression tree then contains a `NullSafeAccessExpression` node for that link rather than plain property access:
 
 ```php
 <?php
 
-$columns->selectMaybe(\Tyhp\Generic::bind(\Tyhp\PropertyPath::class, null)(
-    \User::class,
-    '?string',
-    ['billing', 'city'],
-    fn(\User $u): ?string => $u->billing?->city,
-    nullSafeFlags: [false, true]
-));
+$columns->selectMaybe(\Tyhp\PropertyPath::on(\User::class)->billing->nullSafe()->city->backedBy(fn(\User $u): ?string => $u->billing?->city));
 ```
 
 `getValue()` returns `null` when a null-safe link is `null`:
@@ -229,8 +218,10 @@ The compiled closure for execution. Every `Expression` carries its original comp
 :::
 
 :::member[readonly string $returnType]
-The resolved return type of the expression, as a type string.
+The resolved return type of the expression, as a type string in the `\Tyhp\Type::parse()` format. When the closure's PHP return type is the erased form of the body's type (`array` for `array<App\Post>`), the full type is kept.
 :::
+
+Parameter and property nodes keep full declared types in their `type` string: a parameter written `Table<Blog> $t` has type `App\Table<App\Blog>`, a struct parameter has type `struct App\Address`, and `$b->posts` on a `public array<Post> $posts` property has type `array<App\Post>` (the declared type from `\Tyhp\Type::fromProperty()`). Parse any of them with `\Tyhp\Type::parse()`.
 
 :::member[mixed $lastResult]
 The last value produced by `__invoke` or `PropertyPath::getValue`.
@@ -334,9 +325,23 @@ Represents a `new` expression (`new Money($x->amount)`). Properties: `string $cl
 Represents an `instanceof` or `is` check (`$x->value is int`, `$x instanceof Address`). Properties: `ExpressionNode $operand`, `string $targetType`. `nodeType`: `instanceof`.
 :::
 
+:::member[NullSafeMethodCallExpression]
+Represents a null-safe method call (`$x->address?->format()`). Properties: `ExpressionNode $object`, `string $method`, `array<ExpressionNode> $arguments`. `nodeType`: `nullSafeMethodCall`.
+:::
+
+:::member[ArrayExpression]
+Represents an array literal (`[$x->id, 'name' => $x->name]`). Properties: `array<ArrayItem> $items`. Each `ArrayItem` has `?ExpressionNode $key` (`null` when the item takes the next integer key) and `ExpressionNode $value`. `nodeType`: `array`.
+:::
+
+:::member[LambdaExpression]
+Represents a nested arrow `fn` (`fn ($p) => $p->rating > 3`). Properties: `array<ParameterExpression> $parameters`, `ExpressionNode $body`, `string $returnType`. Evaluating it gives a `\Closure`. `nodeType`: `lambda`.
+:::
+
+A `ParameterExpression` refers to the nearest enclosing `LambdaExpression` that declares a parameter of that name; otherwise it refers to the outer lambda's argument at its `index`. When a `?->` link meets `null`, the rest of that chain of property reads, method calls, and array reads is skipped and the chain is `null`, as in PHP.
+
 ## Expression Tree Compiled PHP Output
 
-When you pass an `fn` expression to an `Expression<callable(T): R>` parameter, the compiler emits node constructors wrapped in a `\Tyhp\Expression`. The tree is built bottom-up: leaf nodes first, then their parents. Node constructors take their members positionally, with the node's `type` string last; the `Expression` itself takes `body`, `parameters`, `callable`, and `returnType`.
+When you pass an `fn` expression to an `Expression<callable(T): R>` parameter, the compiler emits a fluent `\Tyhp\Expr` chain that builds the tree, starting from the parameter (`\Tyhp\Expr::param(name, type)`). Property reads are property steps, and method calls and operators are builder methods such as `call(...)`, `gt(...)`, and `eq(...)`. `backedBy(...)` receives the original `fn` and returns the `\Tyhp\Expression`; the tree's return type comes from the closure's return type. Captured variables and literals are passed as builder arguments, so their values are read when the tree is built.
 
 ```tyhp
 <?tyhp
@@ -348,21 +353,8 @@ $query->where(fn ($u) => $u->age > $minAge);
 ```php
 <?php
 
-$query->where(\Tyhp\Generic::bind(\Tyhp\Expression::class, null)(
-    body: new \Tyhp\Expression\BinaryExpression(
-        new \Tyhp\Expression\PropertyAccessExpression(
-            new \Tyhp\Expression\ParameterExpression('u', \User::class, 0),
-            'age',
-            'int'
-        ),
-        '>',
-        new \Tyhp\Expression\ConstantExpression($minAge, 'int'),
-        'bool'
-    ),
-    parameters: [new \Tyhp\Expression\ParameterExpression('u', \User::class, 0)],
-    callable: fn(\User $u): bool => $u->age > $minAge,
-    returnType: 'bool'
-));
+$minAge = 18;
+$query->where(\Tyhp\Expr::param('u', \User::class)->age->gt($minAge)->backedBy(fn(\User $u): bool => $u->age > $minAge));
 ```
 
 ```tyhp
@@ -374,22 +366,7 @@ $query->where(fn ($u) => $u->getFullName() === 'Ada Lovelace');
 ```php
 <?php
 
-$query->where(\Tyhp\Generic::bind(\Tyhp\Expression::class, null)(
-    body: new \Tyhp\Expression\BinaryExpression(
-        new \Tyhp\Expression\MethodCallExpression(
-            new \Tyhp\Expression\ParameterExpression('u', \User::class, 0),
-            'getFullName',
-            [],
-            'string'
-        ),
-        '===',
-        new \Tyhp\Expression\ConstantExpression('Ada Lovelace', 'string'),
-        'bool'
-    ),
-    parameters: [new \Tyhp\Expression\ParameterExpression('u', \User::class, 0)],
-    callable: fn(\User $u): bool => $u->getFullName() === 'Ada Lovelace',
-    returnType: 'bool'
-));
+$query->where(\Tyhp\Expr::param('u', \User::class)->call('getFullName')->eq('Ada Lovelace')->backedBy(fn(\User $u): bool => $u->getFullName() === 'Ada Lovelace'));
 ```
 
 ## Captured Variables
@@ -472,6 +449,32 @@ Output:
 age > 18
 firstName === 'Ada'
 ```
+
+## Nested Lambdas
+
+An arrow `fn` inside the body, such as a callback argument, becomes part of the tree as a `LambdaExpression`. Its parameter types come from the parameter it is passed to: a `callable(Post): bool` parameter, a `PropertyPath<callable(Tag): string>` parameter, or the callable member of `Expression<callable(Post): bool>|(callable(Post): bool)`. The nested body follows the same rules as the outer body. It can read the outer parameters and captured variables, and a nested parameter hides an outer parameter with the same name.
+
+```tyhp
+<?tyhp
+
+class Posts {
+    public function any(Expression<callable(Post): bool>|(callable(Post): bool) $test): bool { return false; }
+    public function sum(callable(Post): int $value): int { return 0; }
+}
+
+int $minRating = 3;
+
+// MethodCallExpression('any') on PropertyAccessExpression('posts'), with one argument:
+// - LambdaExpression(parameters: [$p], returnType: 'bool')
+//   - BinaryExpression(>)
+//     - PropertyAccessExpression('rating') on ParameterExpression('p')
+//     - ConstantExpression(3)   ← captured $minRating
+$query->where(fn ($b) => $b->posts->any(fn ($p) => $p->rating > $minRating));
+
+$query->where(fn ($b) => $b->posts->sum(fn ($p) => $p->rating) > 10);
+```
+
+A nested `fn` cannot have by-reference, variadic, or default-valued parameters, and a `function () {}` closure is not allowed in a tree (**TYHP4322**).
 
 ## Multi-Parameter Expressions
 
@@ -575,7 +578,7 @@ Expression trees integrate with the type system as follows:
 - `Expression<callable(T): R>` is callable: `$expr($userInstance)` runs the stored closure. `compile()` returns `\Closure<callable(T): R>`.
 - An `Expression` can be passed to a PHP function parameter declared `callable`, such as `\array_filter($items, $expr)`.
 - An `Expression<callable(T): R>` value can be passed to a `callable(T): R` parameter with the same shape. A `\Closure` parameter accepts any `Expression`-typed argument: the compiler passes its `->callable`, whether the argument is a variable (annotated or inferred) or a call result.
-- When a parameter is declared `Expression<callable(T): R>` and you pass an inline `fn`, a generic `R` is inferred from the `fn` body, for example `function select<R>(Expression<callable(Person): R> $selector): R`.
+- When a parameter is declared `Expression<callable(T): R>` or `PropertyPath<callable(T): R>` and you pass an inline `fn`, a generic `R` is inferred from the `fn` body, for example `function select<R>(Expression<callable(Person): R> $selector): R`. For `PropertyPath`, `R` is the type of the last segment, and a `?->` chain makes it nullable: `fn ($p) => $p->boss?->name` gives `?string`. The same holds for a union with the plain callable, such as `PropertyPath<callable(Person): R>|(callable(Person): R)`.
 - `PropertyPath<callable(T): R>` is a subtype of `Expression<callable(T): R>`. Code accepting `Expression` also accepts `PropertyPath`.
 - An `Expression` value passed to an `Expression` parameter must have the same callable shape; otherwise the argument is rejected with **TYHP4010**.
 - When passing a regular `fn` expression to a `callable` or `\Closure` parameter (not `Expression`), the compiler emits a normal closure — no expression tree.
@@ -588,6 +591,7 @@ The following expressions are supported inside `fn` expressions that target `Exp
 - Property access: `$x->prop`
 - Null-safe property access: `$x?->prop`
 - Method calls: `$x->method(...)`
+- Null-safe method calls: `$x?->method(...)`
 - Static method calls: `Class::method(...)`
 - Binary operators:
   - arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
@@ -600,6 +604,8 @@ The following expressions are supported inside `fn` expressions that target `Exp
 - Class constants: `Class::CONST`, and `Class::class`
 - Captured variables from the enclosing scope
 - Array access: `$x->items[$i]`
+- Array literals, list and keyed, including nested arrays: `[$x->id, 'name' => $x->name]`
+- Nested arrow `fn` expressions (see [Nested Lambdas](#nested-lambdas))
 - Ternary and short ternary: `$x ? $y : $z`, `$x ?: $y`
 - Null coalescing: `$x ?? $y` (a `CoalesceExpression`)
 - Type casts: `(string) $x->value`
@@ -621,15 +627,19 @@ The following expressions produce **TYHP4322** — "Expression trees do not supp
 | `throw` expressions | `throw` |
 | `await` expressions | `await` |
 | `yield` expressions | `yield` |
-| Nested `fn` or `function` expressions | `nested fn` |
-| Null-safe method calls: `$x?->method()` (property `?->` is supported) | `nullsafe method call` |
+| `function () { ... }` closures | `closure` |
+| A nested `fn` with a `&` return: `fn &($p) => ...` | `by-reference fn` |
+| Nested `fn` parameters that are by-reference, variadic, or have a default value | `by-reference parameter`, `variadic parameter`, `parameter default value` |
 | `clone` | `clone` |
 | `include` / `require` | `include` |
 | `\|>` pipe | `pipe` |
 | `new class { ... }` | `anonymous class` |
 | `@` error suppression | `error suppression` |
-| Dynamic member names: `$x->{$name}` | `dynamic member` |
-| Array literals: `[1, 2]`, `[...$x]` | `array literal` |
+| Dynamic member names: `$x->{$name}`, `$x->$method()` | `dynamic member` |
+| A class held in a variable or expression: `new $class()`, `$class::create()`, `$x::KIND`, `$x::class` | `dynamic class` |
+| Named call arguments: `$x->pad(width: 3)` | `named argument` |
+| Argument unpacking: `$x->add(...$items)` | `argument unpacking` |
+| Array spread: `[...$x]` | `array spread` |
 | First-class callables: `$x->name(...)`, `strlen(...)` | `first-class callable` |
 | Shell commands: `` `ls` `` | `shell command` |
 | `isset($x->name)` | `isset` |
@@ -801,3 +811,4 @@ echo findExpr(fn ($u) => $u->getFullName());  // methodCall
 - **TYHP4323**: Parameter of type `Expression<callable(T): R>` requires an inline fn expression — reported when an argument that is neither an inline `fn` nor an `Expression` value (a plain closure variable, a `function` closure, `null`) is passed to an `Expression` parameter.
 - **TYHP4324**: Captured variable `$name` in expression tree must be definitely assigned — reported when a captured variable may not be initialized where the `fn` appears.
 - **TYHP4010**: Argument of type `Expression<callable(A): B>` is not assignable to parameter of type `Expression<callable(C): D>` — reported when an `Expression` value of a different callable shape is passed.
+- **TYHP5024**: Cannot emit an expression tree for this fn — reported by the emitter when an `Expression` `fn` body contains a construct it cannot rebuild as a tree. The checker normally reports such bodies as **TYHP4322**; report TYHP5024 as a compiler bug.

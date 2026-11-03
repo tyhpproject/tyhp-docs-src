@@ -114,6 +114,21 @@ if ($name !== null) {
 }
 ```
 
+Loose comparisons against `null` narrow the non-null side: `$name != null` (or `<>`) narrows to `string` when true, and `$name == null` narrows to `string` when false. The other side is not narrowed, because `==` also matches `''`, `0`, and `false`.
+
+## Assertions
+
+A `\assert($condition);` statement narrows the code after it as if the condition held:
+
+```tyhp
+<?tyhp
+
+function label(?User $user): string {
+    \assert($user !== null);
+    return $user->getName();  // OK: $user is `User`
+}
+```
+
 ## Negated Guards (Else Branches)
 
 When a type guard check fails (the else branch), the variable is narrowed to the remaining types -- the original type minus the guarded type. This is called negative narrowing.
@@ -257,6 +272,17 @@ function handleValue(string|int|array $val): void {
     // $val is narrowed to `string|int` for all remaining code
     echo $val;
 }
+
+function cityOf(?User $user): string {
+    if ($user !== null) {
+        \logVisit($user);
+    } else {
+        return "Unknown";
+    }
+
+    // The else branch returned, so only the then branch reaches here
+    return $user->getCity();
+}
 ```
 
 ## Ternary and Match Narrowing
@@ -278,6 +304,29 @@ string $result = match(true) {
     \is_int($value)    => (string) $value,   // narrowed to int
     default            => \number_format($value, 2), // narrowed to float
 };
+```
+
+In `match (true)` and `switch (true)`, arms are tried in order, so each arm's conditions and body also see every earlier condition as false, and `default` sees every condition as false:
+
+```tyhp
+<?tyhp
+
+function role(?User $user): string {
+    return match (true) {
+        $user === null    => 'guest',
+        $user->isAdmin()  => 'admin',          // $user is `User`: the first arm failed
+        default           => $user->getName(), // $user is `User`
+    };
+}
+
+function greet(?User $user): string {
+    switch (true) {
+        case $user === null:
+            return 'Hello';
+        default:
+            return 'Hello ' . $user->getName(); // $user is `User`
+    }
+}
 ```
 
 ## Compiled PHP Output
@@ -425,7 +474,7 @@ if (\is_string($value)) {
     $length = \strlen($value);  // OK: $value is narrowed to string
 }
 
-// ERROR: Property access on potentially null type
+// ERROR TYHP4198: member access on a possibly null value
 ?User $user = \findUser(42);
 // $name = $user->getName();  // $user might be null
 
@@ -436,6 +485,10 @@ if ($user !== null) {
 
 // Or use nullsafe operator (does not narrow, returns nullable)
 ?string $name = $user?->getName();
+
+// ERROR TYHP4198: the result of `?->` is nullable
+$address = $user?->getAddress();
+// $city = $address->city;  // $address might be null
 ```
 
 ## Important Notes
@@ -446,4 +499,5 @@ if ($user !== null) {
 - The narrowed type is usually one of the types in the original union — except a shape guard, which refines `object` / `mixed` (or a union containing them) to the object-shape alias.
 - Outside of the guarded scope, the variable reverts to its full declared type.
 - Multiple guards compound: after checking `!== null` and then `is Foo`, the type is `Foo`.
+- Property reads narrow like variables: after `if ($order->customer !== null)`, `$order->customer->name` is allowed. This also covers `$this->prop`, nested paths (`$order->customer->address`), and static properties (`self::$prop`, `Config::$current`). Assigning or `unset()`-ing a property path ends the narrowing of that path and every path under it. A method call result is not narrowed by checking it; assign it to a variable and check the variable.
 - Custom type guard functions must actually return a boolean value at runtime -- the guard return type only tells the compiler about the narrowing effect.

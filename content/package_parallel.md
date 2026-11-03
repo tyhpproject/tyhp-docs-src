@@ -25,7 +25,7 @@ Methods whose names end in `Async` return a `Promise`. `await` them inside async
 composer require tyhp/parallel:804.0.*
 ```
 
-Version pins follow the same `80N.X.Y` scheme as the other compiled `tyhp/*` helpers, where `80N` matches your `output.phpVersion` (`802` for PHP 8.2 through `805` for PHP 8.5) and `X.Y` is the package's own version (currently `0.1`, so the PHP 8.4 artifact is `804.0.1`). See [Composer Runtime Packages](project_composerPackages.md) for how to pin compiled helpers.
+Version pins follow the same `80N.X.Y` scheme as the other compiled `tyhp/*` helpers, where `80N` matches your `output.phpVersion` (`802` for PHP 8.2 through `805` for PHP 8.5) and `X.Y` is the package's own version (currently `0.3`, so the PHP 8.4 artifact is `804.0.3`). See [Composer Runtime Packages](project_composerPackages.md) for how to pin compiled helpers.
 
 | Requirement | Why |
 |-------------|-----|

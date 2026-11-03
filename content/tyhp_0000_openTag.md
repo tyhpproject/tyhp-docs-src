@@ -111,28 +111,9 @@ The emitter writes the `require_once` into the PHP output. Do not put `require_o
 
 The lexer recognizes the tag that follows `<?` and sets an internal language mode accordingly. When it sees `<?tyhp` followed by whitespace, it emits a `T_TYHP_OPEN_TAG` token and enters Tyhp mode. When it sees `<?tyhpdef` followed by whitespace, it emits a `T_TYHPDEF_OPEN_TAG` token and enters Tyhpdef mode. When it sees `<?php`, it emits the standard `T_OPEN_TAG` token and enters PHP mode. When it sees `<?=`, it enters PHP echo mode (`phpEcho`). A bare `<?` that is not followed by `tyhp`, `tyhpdef`, or `php` is not a PHP short open tag. This language mode determines which keywords are active -- for example, `struct`, `async`, `await`, `is`, `typeof`, and `nameof` are only recognized as keywords in Tyhp mode.
 
-## Mixing `<?tyhp` and `<?php` in `.tyhp` Files
+## PHP Code Belongs in `.php` Files
 
-A `.tyhp` file can contain both `<?tyhp` and `<?php` code blocks. This is useful for gradual migration or when you need to include PHP code that uses features outside Tyhp's type system. Each block is independently parsed in its respective language mode:
-
-```tyhp
-<?tyhp
-// This block is Tyhp code -- type-checked
-$name = "World";
-?>
-
-<!-- This is inline HTML output -->
-<h1>Hello!</h1>
-
-<?php
-// This block is PHP code -- standard PHP rules apply
-$legacyVar = someOldFunction();
-?>
-```
-
-:::note
-While mixing is allowed, the Tyhp compiler does not type-check PHP blocks within `.tyhp` files. PHP blocks are passed through as-is. Only `<?tyhp` blocks receive the full benefit of Tyhp's type system.
-:::
+A `.tyhp` file contains Tyhp code, plus inline HTML between `<?tyhp` blocks. It does not contain `<?php` blocks. Put PHP code in a `.php` file in the same project. The compiler passes `.php` files through unchanged, and they can call your compiled Tyhp code like any other PHP.
 
 ## Compiled PHP Output
 
@@ -186,11 +167,11 @@ Use `declare(output_file='path')` when you need a specific output file path, suc
 ## Common Mistakes
 
 :::danger
-Don't use `<?php` as the open tag for new Tyhp code. Code inside `<?php` blocks is parsed in PHP mode without Tyhp's type checking, keywords, or compile-time features.
+Don't put `<?php` blocks in a `.tyhp` file. Write PHP code in a `.php` file instead.
 :::
 
 :::danger
-Don't use `<?=` expecting Tyhp mode — that is PHP echo mode. Don't write a bare `<?` as a PHP short open tag; it is not treated as PHP. Use `<?tyhp` (or tagless source) for Tyhp, and `<?php` only when you intend PHP mode.
+Don't use `<?=` expecting Tyhp mode — that is PHP echo mode. Don't write a bare `<?` as a PHP short open tag; it is not treated as PHP. Use `<?tyhp` (or tagless source) for Tyhp, and `<?php` only in `.php` files.
 :::
 
 :::danger

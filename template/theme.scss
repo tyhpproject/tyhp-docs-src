@@ -66,7 +66,7 @@ $info: $theme-info-color;
 }
 
 .docs-sidebar {
-    background: inherit;
+    background: var(--bs-body-bg);
 }
 
 .logo-icon-dark {
@@ -160,7 +160,26 @@ nav a[href^="#"]:where(:has(~ * :target)) {
     }
 
     .docs-sidebar {
-        background: inherit;
+        background: var(--bs-body-bg);
+    }
+
+    .callout-block {
+        background: rgba(255, 255, 255, 0.04);
+
+        code {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        @each $variant, $color in (info: $theme-info-color, success: $theme-success-color, warning: $theme-warning-color, danger: $theme-danger-color) {
+            &.callout-block-#{$variant} {
+                background: rgba($color, 0.12);
+
+                .callout-title,
+                a {
+                    color: lighten($color, 10%);
+                }
+            }
+        }
     }
 
     .logo-icon-dark {

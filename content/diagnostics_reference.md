@@ -401,15 +401,15 @@ Keep the signatures and the implementation of one overload set together, in that
 :::
 
 :::member[TYHP3033 (Warning)]
-**BinderOverloadLone.** Message: <code>`{0}` has a single overload signature; declare at least two overloads, or remove it and use the implementation's own signature</code>.
+**BinderOverloadLone.** Message: <code>`{0}` has a single overload signature; declare at least two overloads, or remove it and use the implementation&#39;s own signature</code>.
 
-A set with one signature hides the implementation's signature without adding a second call shape.
+An overload set with one signature hides the implementation's signature without adding a second call shape.
 :::
 
 :::member[TYHP3034 (Error)]
 **BinderOverloadDuplicate.** Message: <code>Overload signature `{0}` has the same parameters and return type as an earlier overload</code>.
 
-The first matching signature always wins, so an identical later signature can never be selected. Remove it or change its parameter types.
+The first matching overload signature always wins, so an identical later signature can never be selected. Remove it or change its parameter types.
 :::
 
 :::member[TYHP3035 (Error)]
@@ -420,6 +420,7 @@ Every signature of a method overload set and its implementation share one set of
 
 :::member[TYHP3036 (Error)]
 **BinderOverloadConstructorNotSupported.** Message: <code>Overload signatures are not supported on constructors or destructors (`{0}`); declare separate factory methods or use optional parameters</code>.
+Run <code>tyhp --explain TYHP3036</code> for the long-form explanation.
 :::
 
 
@@ -572,6 +573,8 @@ function getStatus(bool $active): string {
 ```
 
 Fix: Add a return statement for every code path, including `else` branches and after loops.
+
+A `switch` returns on every path when it has a `default` case and every case returns or throws, either directly or by falling through into a case that does. A `break` that leaves the switch, or a missing `default`, leaves a path that continues after the switch.
 :::
 
 :::member[TYHP4012 (Warning)]
@@ -700,20 +703,26 @@ A subclass attempts to override a method that is declared as `final` in the pare
 :::member[TYHP4021 (Error)]
 **CheckerReadonlyPropertyReassigned.** Message: <code>Cannot assign to readonly property `{0}`</code>.
 
-A `readonly` property is being assigned outside of the constructor.
+A `readonly` property is assigned where PHP does not allow it. PHP lets a readonly property be initialized once, from inside its declaring class (and, from PHP 8.4, a subclass). This error is reported for a write through a receiver other than `$this` inside the class, and for a write from a function, the file scope, or an unrelated class. Every instance property of a `readonly class` is readonly, whether or not it repeats the modifier.
+
+A property with an explicit set visibility such as `public(set)` is not reported.
 
 ```tyhp
 <?tyhp
-class User {
-    public function __construct(
-        public readonly string $name
-    ) {}
+readonly class User {
+    public function __construct(public string $name) {}
 
-    public function rename(string $newName): void {
-        $this->name = $newName;  // Error: Cannot assign to readonly property
+    public function copyFrom(User $other): void {
+        $other->name = $this->name;  // Error: Cannot assign to readonly property `name`
     }
 }
+
+function rename(User $user): void {
+    $user->name = 'Ada';  // Error: Cannot assign to readonly property `name`
+}
 ```
+
+Fix: Create a modified copy with `clone $user with [name => 'Ada']`, or set the value in the constructor.
 :::
 
 :::member[TYHP4022 (Error)]
@@ -736,9 +745,11 @@ enum Status: string {
 :::
 
 :::member[TYHP4024 (Error)]
-**CheckerEnumMethodNotAllowed.** Message: <code>Enum cannot have a constructor</code>.
+**CheckerEnumMethodNotAllowed.** Message: <code>Enum cannot declare magic method `{0}`</code>.
 
-An enum declares a method that is not allowed (e.g., a constructor).
+PHP does not allow an enum to declare these magic methods, and rejects the enum when it is loaded: `__construct`, `__destruct`, `__clone`, `__get`, `__set`, `__isset`, `__unset`, `__toString`, `__serialize`, `__unserialize`, `__sleep`, `__wakeup`, and `__set_state`. Enums may declare `__call`, `__callStatic`, and `__invoke`.
+
+`__debugInfo()` is allowed on enums from PHP 8.6. Below that `output.phpVersion` it is reported as TYHP4379.
 :::
 
 :::member[TYHP4025 (Error)]
@@ -1234,7 +1245,6 @@ Run <code>tyhp --explain TYHP4095</code> for the long-form explanation.
 **CheckerSpreadNonIterable.** Message: <code>Spread operator requires an iterable type, found `{0}`</code>.
 
 A call argument spread (`f(...$x)`) needs an array or other iterable; a `mixed` value must be narrowed first.
-Run <code>tyhp --explain TYHP4096</code> for the long-form explanation.
 :::
 
 :::member[TYHP4097 (Error)]
@@ -1260,7 +1270,7 @@ Run <code>tyhp --explain TYHP4100</code> for the long-form explanation.
 :::member[TYHP4101 (Error)]
 **CheckerSymbolNameNotFound.** Message: <code>Symbol `{0}` is not found for type `{1}`</code>.
 
-A property read, method call, or static member access whose receiver type has no such member. This covers instance members of a fully-known class or interface (including bare `object`, which has no members) as well as scalar and other built-in receivers. The error is not reported when the class has a magic accessor (`__get`, `__call`, `__callStatic`), when part of its ancestry is unresolved, or when the member name is dynamic (`$obj->{$name}`).
+A property read, method call, or static member access names a symbol its receiver type does not have. This covers instance members of a fully-known class or interface (including bare `object`, which has no members) as well as scalar and other built-in receivers. The error is not reported when the class has a magic accessor (`__get`, `__call`, `__callStatic`), when part of its ancestry is unresolved, or when the member name is dynamic (`$obj->{$name}`).
 
 Inside the branch of `\property_exists($obj, 'name')` or `\method_exists($obj, 'name')` with a literal name, that member is known to exist.
 
@@ -1297,14 +1307,21 @@ Run <code>tyhp --explain TYHP4106</code> for the long-form explanation.
 Run <code>tyhp --explain TYHP4107</code> for the long-form explanation.
 :::
 
-:::member[TYHP4108 (Error)]
-**CheckerReadonlyClassMutableProperty.** Message: <code>Mutable property `{0}` in readonly class</code>.
-Run <code>tyhp --explain TYHP4108</code> for the long-form explanation.
-:::
-
 :::member[TYHP4109 (Error)]
-**CheckerReadonlyClassStaticProperty.** Message: <code>Static property in readonly class</code>.
-Run <code>tyhp --explain TYHP4109</code> for the long-form explanation.
+**CheckerReadonlyClassStaticProperty.** Message: <code>Readonly class `{1}` cannot declare static property `{0}`</code>.
+
+Every instance property of a `readonly class` is readonly, and PHP does not allow static properties in a readonly class at all. PHP rejects the class when it is loaded.
+
+```tyhp
+<?tyhp
+readonly class Config {
+    public static int $instances = 0;   // Error: static property in a readonly class
+
+    public function __construct(public string $name) {}
+}
+```
+
+Fix: Move the static state to a separate, non-readonly class, or use a class constant.
 :::
 
 :::member[TYHP4110 (Error)]
@@ -1360,7 +1377,6 @@ function narrow(int $a): int {   // the implementation does not accept `string`
     return $a;
 }
 ```
-Run <code>tyhp --explain TYHP4118</code> for the long-form explanation.
 :::
 
 :::member[TYHP4119 (Warning)]
@@ -1677,7 +1693,10 @@ Tyhp forbids parameterized `static<...>` in every scope, including `final` class
 
 Late-static binding names the late-bound class; it does not invent or rebind generic type arguments. Type arguments come from the call-site class spelling (`Child<string>::factory()`) or from the receiver/`$this` instantiation for instance methods.
 
-Use: - bare `static` for fluent / LSB returns that should follow the late-bound class - `self<...>` or the declaring class name for factories that stamp method generics onto the class (e.g. `_async<T>(...): self<__Awaited<T>>`) - `parent<...>` when an explicit parent instantiation is required
+Use:
+- bare `static` for fluent / LSB returns that should follow the late-bound class
+- `self<...>` or the declaring class name for factories that stamp method generics onto the class (e.g. `_async<T>(...): self<__Awaited<T>>`)
+- `parent<...>` when an explicit parent instantiation is required
 
 ```tyhp
 final class Promise<TReturn extends __Awaited<void|mixed> = __Awaited<mixed>> {
@@ -1850,6 +1869,46 @@ A foreach type annotation is a compatibility check, not a narrowing. The iterate
 When the checker cannot type a receiver, that expression is marked unresolved so a missing name does not cascade through assignability. Member access, method calls (including extension lookup), and indexing still require a resolved type and report TYHP4197.
 
 This diagnostic is omitted when the receiver subtree already has an error (for example `unknownFn()->x` reports only the undefined function). Unnarrowed `mixed` uses TYHP4160, not this code. Assignability of unresolved values is unchanged.
+:::
+
+:::member[TYHP4198 (Error)]
+**CheckerPossiblyNullReceiver.** Message: <code>Cannot access `{0}` on a possibly null value of type `{1}`</code>.
+
+Values are non-nullable by default, so a `?T` / `T|null` value must be checked before its members are used. Reading or writing a property, calling a method, or indexing a struct or `ArrayAccess` object through a receiver that may be `null` is an error at runtime (PHP throws for method calls and property writes, and warns and yields `null` for property reads).
+
+```tyhp
+function findUser(int $id): ?User { /* … */ }
+
+$user = findUser(2);
+echo $user->name;          // TYHP4198
+
+if ($user !== null) {
+    echo $user->name;      // OK: narrowed to User
+}
+echo $user?->name ?? '';   // OK: null-safe access
+```
+
+Narrow the receiver first (`!== null`, `instanceof` / `is`, an early `return` / `throw`, a type guard), or use `?->` when `null` should propagate. Property and index reads inside `isset`, `empty`, and the left side of `??` / `??=` may use a possibly null receiver; method calls there still require a non-null receiver. A method call result cannot be narrowed by checking it once; assign it to a variable and check the variable.
+:::
+
+:::member[TYHP4199 (Error)]
+**CheckerTemplateStringUnsupportedHole.** Message: <code>Template hole must be a string, int, or float type, or a literal or union of them; found {0}</code>.
+
+A template string type matches text, so each `${…}` hole must name a type whose values have a string form: `string`, `int`, `float`, a literal of one of them (`'GET'`, `3`, `2.5`), a template string or symbol-name type, a type parameter constrained to one of these, an alias for any of them, or a union of them. Types without a string form (`array`, `bool`, `null`, `mixed`, `object`, classes, enums, callables) cannot be matched against text, and a hole written as an expression (a variable, a call, a class constant, an operator, or an inline template) is not a type.
+
+```tyhp
+type Tagged = "tag-${bool}";        // TYHP4199
+type Keyed  = "key-${$name}";       // TYHP4199
+type Nested = "a-${"b${int}"}";     // TYHP4199
+
+type Flag   = 'on'|'off';
+type Toggle = "tag-${Flag}";        // OK: string literals
+type Items  = "${int} items";       // OK
+type Inner  = "b${int}";
+type Outer  = "a-${Inner}";         // OK: name the inner template with an alias
+```
+
+Name the set of strings you mean with a string, numeric, or literal type, and give a nested template its own alias.
 :::
 
 :::member[TYHP4200 (Warning)]
@@ -2101,7 +2160,7 @@ Use only `->` or `?->` property accesses starting at the parameter — `takes(fn
 :::member[TYHP4322 (Error)]
 **CheckerExpressionUnsupportedNode.** Message: <code>Expression trees do not support `{0}` expressions; simplify the fn body</code>.
 
-The inline `fn` body contains an expression kind that cannot be represented in an expression tree. The message names the construct in words, for example `function call`, `array literal`, `first-class callable`, `shell command`, `string interpolation`, `assignment`, `match`, `nested fn`, `await`, or `isset`. These constructs are rejected so the emitted tree stays a faithful, inspectable data structure. See [Parsable Lambdas and Expression Trees](tyhp_3000_parsableLambdas.md#unsupported-expression-types) for the full list.
+The inline `fn` body contains an expression kind that cannot be represented in an expression tree. Assignments, `await`, `yield`, `match`, `function` closures, array spread (`...$xs`), free function calls, `throw`, and similar constructs are rejected so the emitted tree stays a faithful, inspectable data structure. A nested arrow `fn` is part of the tree; its parameters cannot be by-reference, variadic, or defaulted, and its body follows the same rules.
 
 ```tyhp
 <?tyhp
@@ -2110,7 +2169,7 @@ function takes(\Tyhp\Expression<callable(User $u): bool> $pred): void {}
 takes(fn ($u) => await $u->load());
 ```
 
-Simplify the body to supported forms: property/method access, operators, casts, ternary/`??`, array access, `new`, `instanceof`/`is`, literals, and definitely-assigned captures.
+Simplify the body to supported forms: property/method access (including `?->`), operators, casts, `instanceof`/`is`, ternary/`??`, array access, array literals, nested arrow `fn`, `new`, literals, and definitely-assigned captures. See [Parsable Lambdas and Expression Trees](tyhp_3000_parsableLambdas.md#unsupported-expression-types) for the full list.
 :::
 
 :::member[TYHP4323 (Error)]
@@ -2565,6 +2624,27 @@ function demo(): void {
 ```
 :::
 
+:::member[TYHP4378 (Error)]
+**CheckerReadonlyPropertyDefaultRequiresPhp86.** Message: <code>A default value on readonly property `{0}` requires PHP `8.6` or later; target is `{1}`</code>.
+
+PHP 8.6 lets a readonly property declare a default value, which counts as its one initialization. Earlier PHP versions reject the class when it is loaded ("cannot have default value"). Tyhp emits the declaration as written, so it reports this error when `output.phpVersion` is below 8.6. This covers properties declared `readonly` and every property of a `readonly class`.
+
+Set the value in the constructor instead, or make it a promoted constructor parameter. A promoted parameter's default is a parameter default, which works on every target:
+
+```tyhp
+<?tyhp
+final class Point {
+    public function __construct(public readonly int $x = 0) {}
+}
+```
+:::
+
+:::member[TYHP4379 (Error)]
+**CheckerEnumDebugInfoRequiresPhp86.** Message: <code>`__debugInfo()` on enum `{0}` requires PHP `8.6` or later; target is `{1}`</code>.
+
+PHP 8.6 lets an enum declare `__debugInfo()`, which controls what `var_dump()` shows for its cases. Earlier PHP versions reject the enum when it is loaded ("cannot include magic method __debugInfo"), so Tyhp reports this error when `output.phpVersion` is below 8.6. The other magic methods PHP does not allow on enums are TYHP4024 at every target.
+:::
+
 :::member[TYHP4500 (Warning)]
 **CheckerDeprecatedUsage.** Message: <code>`{0}` is deprecated{1}</code>.
 
@@ -2755,6 +2835,14 @@ This is non-fatal. If mappings look wrong in a debugger, report the generated an
 Run <code>tyhp --explain TYHP5023</code> for the long-form explanation.
 :::
 
+:::member[TYHP5024 (Error)]
+**EmitterExpressionTreeUnsupportedNode.** Message: <code>Cannot emit an expression tree for this fn: `{0}` has no tree form; simplify the fn body</code>.
+
+An inline `fn` passed where `Expression<callable(...): R>` is expected is compiled into an expression tree. The emitter found a construct in the body that it cannot rebuild as a tree node. Emitting the `fn` as an ordinary closure would hand the callee a value with no tree, so the build stops instead.
+
+The checker normally reports unsupported bodies as TYHP4322 before emit. Seeing TYHP5024 means the checker accepted a construct the emitter does not support; please report it with the `fn` body named in the message. Rewriting that part of the body with the forms listed under TYHP4322 avoids the error.
+:::
+
 
 ## Configuration Errors (TYHP6xxx)
 
@@ -2911,6 +2999,12 @@ Copying extra files into the publish directory failed. Check that `output.publis
 **BuildPublishContentUnmatched.** Message: <code>Publish content src `{0}` matched no files</code>.
 
 An `output.publishContent` src pattern was unmatched: it matched no files. Set `required` to true if a missing match should fail the build.
+:::
+
+:::member[TYHP7108 (Error)]
+**BuildRuntimePackageNoPhpRelease.** Message: <code>Runtime package `{0}` has no release for PHP `{1}`; compiled `tyhp/*` packages are published for PHP `{2}` through `{3}`</code>.
+
+With `build.updateComposer`, the build adds a Composer constraint for each compiled `tyhp/*` runtime package the output uses. Those packages are published once per PHP minor version as `80N.X.Y`; for example, `tyhp/core` `805.0.3` is the PHP 8.5 build. When no build is published for `output.phpVersion`, there is no correct constraint, so the build reports this error and leaves `composer.json` unchanged rather than requiring another PHP version's build. Set `output.phpVersion` to one of the listed versions.
 :::
 
 :::member[TYHP7200 (Error)]

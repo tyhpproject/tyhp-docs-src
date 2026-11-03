@@ -9,7 +9,7 @@ status:
 Structs are lightweight, schema-based value types in Tyhp. They always compile to plain PHP associative arrays, giving you the performance of arrays with the type safety of named structures. Structs support property types, default values, nullable-as-optional, array key aliases, structural (schema-based) type compatibility, inheritance via extends, and anonymous inline declarations. Unlike classes, structs contain only typed properties — no methods, constants, or static members.
 
 :::note
-Struct declarations are completely erased from PHP output. They exist only at compile time for type checking. Instantiation produces an associative array. PHP callers see `array`; the compiler does not emit a runtime shape check.
+A struct produces no PHP class or file of its own. Instantiation produces an associative array, and PHP callers see `array`; the compiler does not emit a runtime shape check. A named struct does register a runtime type descriptor (`\Tyhp\Type::register(...)`) in its namespace's `_functions.php`, which `typeof` and `is` use. See [Type Aliases](tyhp_0700_typeAliases.md).
 :::
 
 :::note
@@ -40,8 +40,12 @@ type UserProfile = struct {
 
 ```php
 <?php
-// PHP output — struct declarations are erased entirely.
-// No PHP code is generated for the struct definition.
+// PHP output — no class is generated. Each named struct registers a runtime
+// type descriptor in the namespace's _functions.php:
+
+\Tyhp\Type::register('Point', fn () => \Tyhp\Type::struct()->field('x', \Tyhp\Type::float())->field('y', \Tyhp\Type::float()));
+
+\Tyhp\Type::register('UserProfile', fn () => \Tyhp\Type::struct()->field('name', \Tyhp\Type::string())->field('email', \Tyhp\Type::string())->field('age', \Tyhp\Type::int())->optional('bio', \Tyhp\Type::nullable(\Tyhp\Type::string())));
 ```
 
 ## Property Types and Defaults

@@ -218,7 +218,7 @@ $app->config = \Tyhp\ObjectHelper::with(clone $defaultConfig, ['debug' => true, 
 
 ## with and readonly Properties
 
-`readonly` properties cannot be assigned after construction. `new ... with` and `clone ... with` are allowed to set them on the new or cloned instance. Direct assignment and in-place `$obj with [...]` after construction are not.
+`readonly` properties cannot be assigned after construction. `new ... with` and `clone ... with` are allowed to set them on the new or cloned instance. Direct assignment and in-place `$obj with [...]` after construction are not. Every instance property of a `readonly class`, including promoted constructor parameters, follows these rules whether or not it repeats `readonly`.
 
 On PHP 8.5+, `clone ... with` uses native `clone($obj, [...])`. On PHP 8.2–8.4, `clone ... with` on `readonly` properties requires `build.experimentalReadonlyCloneWith: true` in `tyhp.json` (the compiler emits a reflection IIFE: `newInstanceWithoutConstructor`, `$__tyhp_overrides`, then `clone $__wrapper` — not a simple `__clone()` wrapper around the source). `new ... with` on `readonly` does not need that flag (PHP 8.4 emits an anonymous class with `__clone()`; PHP 8.5 uses `clone(new Color(), [...])`). `readonly` plus `with` is the immutable-update pattern.
 

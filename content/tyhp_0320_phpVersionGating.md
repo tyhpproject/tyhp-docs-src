@@ -315,6 +315,21 @@ declare(php=">=8.4") {
 
 See [PHP Engine Attributes](tyhp_0330_phpEngineAttributes.md).
 
+## Declarations that need a newer PHP
+
+Some declarations are rejected by PHP itself below a given version. Tyhp emits them unchanged, so the checker reports them when `output.phpVersion` is too low:
+
+| Declaration | Needs | Below that |
+|-------------|-------|------------|
+| A default value on a non-static `readonly` property, or on any instance property of a `readonly class` (`public readonly int $x = 1;`) | PHP 8.6 | **TYHP4378**. Assign the value in the constructor, or use a promoted constructor parameter with a default, which every version accepts. |
+| `__debugInfo()` on an enum | PHP 8.6 | **TYHP4379** |
+
+```tyhp
+class Point {
+    public function __construct(public readonly int $x = 1) {}
+}
+```
+
 ## Extension presence
 
 `declare(ext="…")` keeps or drops a block according to whether an extension's tyhpdef package is loaded. The key must be alone in that `declare` (`TYHP8039`).
@@ -432,6 +447,8 @@ File-level `declare(ext="!intl");` gates the rest of that file the same way a fi
 | TYHP4305 | Error | Missing or non-string `version` argument |
 | TYHP4306 | Warning | `output.phpVersion` unset; defaulted to `8.2` (once per compilation) |
 | TYHP4371 | Error | `#[\Tyhp\Php]` on a property, class constant, enum case, or interface method in `.tyhp` source |
+| TYHP4378 | Error | Default value on a readonly property when `output.phpVersion` is below 8.6 |
+| TYHP4379 | Error | `__debugInfo()` on an enum when `output.phpVersion` is below 8.6 |
 | TYHP8016 | Error | `#[\Tyhp\Php]` on a tyhpdef property hook (`get`/`set`); place it on the property or `declare(php=…)` |
 
 See the [Diagnostic Code Reference](diagnostics_reference.md) for the compiler's short messages.

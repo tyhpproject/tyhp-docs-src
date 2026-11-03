@@ -4,7 +4,7 @@ title: 'Previous Releases'
 
 ## 805.1.2-beta.3 (current public beta)
 
-Patch on the public beta. GitHub Release tag `v805.1.2-beta.3`. MAJOR `805` means the emit ceiling is PHP 8.5 (the compiler still targets 8.2–8.4 via `output.phpVersion`). Compiled `tyhp/*` runtime helpers version independently as `80N.X.Y` (source `0.2` → `802.0.2`–`805.0.2` for `tyhp/core`). `tyhpdef/*` packages use the version in that package’s `composer.json`.
+Patch on the public beta. GitHub Release tag `v805.1.2-beta.3`. MAJOR `805` means the emit ceiling is PHP 8.5 (the compiler still targets 8.2–8.4 via `output.phpVersion`). Compiled `tyhp/*` runtime helpers version independently as `80N.X.Y` (source `0.3` → `802.0.3`–`805.0.3` for `tyhp/core`). `tyhpdef/*` packages use the version in that package’s `composer.json`.
 
 This is a **prerelease**. Semver compatibility guarantees apply from the first stable `805.N.N`, not from beta. See [Roadmap](release_roadmap.md) and [Release Planning](release_planning.md).
 

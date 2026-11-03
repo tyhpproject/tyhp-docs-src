@@ -943,7 +943,7 @@ Returns the process-wide loop, creating it on first use. Every promise, timer, a
 <a id="eventloop-run"></a>
 
 :::member[public function run<T extends __Awaited<void|mixed> = mixed>(Promise<T> $rootPromise, ?CancellationToken $token = null): T]
-Runs the loop until `$rootPromise` has settled and no work is immediately runnable, then returns the root's value or throws its rejection reason. Timers that are not yet due, intervals, and stream watchers do not keep it running after the root has settled; they stay registered for the next time the loop runs.
+Runs the loop until `$rootPromise` has settled and no work is immediately runnable, then returns the root's value or throws its rejection reason. `T` is inferred from `$rootPromise`, so the result has the promise's settled type; a `Promise<void>` (an `async` function declared `: void`) can be run for its effect. Timers that are not yet due, intervals, and stream watchers do not keep it running after the root has settled; they stay registered for the next time the loop runs.
 
 Throws `\LogicException` when the loop is already running. Exceptions thrown by timer, microtask, and stream callbacks propagate out of `run()`. If `stop()` ends the loop while the root is still pending, `run()` throws `InvalidPromiseStateException`.
 

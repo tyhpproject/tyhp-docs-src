@@ -50,6 +50,7 @@ Several projects add types to PHP in different ways:
 - [FAQ: General](faq_general.md) — PHPStan and Psalm
 - [Hack / HHVM](other_hack.md)
 - [TypePHP (Swoole AOT)](other_typephp.md)
+- [TypePHP (Runtime Type Checker)](other_typephp_runtime.md)
 - [PXP](other_pxp.md)
 - [ReactPHP](other_reactphp.md) — async
 - [TypeScript](other_typescript.md)

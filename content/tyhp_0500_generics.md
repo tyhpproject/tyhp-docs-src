@@ -73,6 +73,44 @@ PHP builtin and overlay generics that omit the stamp stay erased / inlined. Same
 
 `#[\Tyhp\EraseGeneric]` is compile-only (`#[\Tyhp\NoEmit]`). It is legal on a class, a property, or a promoted constructor parameter. On a method or function it is an error. The attribute is not inherited; a tracked child of an erased generic parent does not call `parent::__initGenerics__`.
 
+### Declared property types at runtime
+
+When a property's PHP type hint loses part of its Tyhp type (type arguments, a struct type, or a source type alias), the compiler adds `#[\Tyhp\PropertyType]` with the full type. Promoted constructor parameters get the same attribute.
+
+```tyhp
+<?tyhp
+namespace App;
+
+class Blog {
+    public array<Post> $posts = [];
+    public ?Table<Blog> $related = null;
+    public function __construct(public array<string, int> $counts = []) {}
+}
+```
+
+```php
+// PHP output
+class Blog
+{
+    #[\Tyhp\PropertyType('array<App\\Post>')]
+    public array $posts = [];
+    #[\Tyhp\PropertyType('?App\\Table<App\\Blog>')]
+    public ?\App\Table $related = null;
+    public function __construct(#[\Tyhp\PropertyType('array<string, int>')] public array $counts = []) {}
+}
+```
+
+`\Tyhp\Type::fromProperty()` reads the declared type, and falls back to the reflected PHP type when there is no attribute:
+
+```php
+$posts = \Tyhp\Type::fromProperty(\App\Blog::class, 'posts');
+(string)$posts;                    // 'array<App\Post>'
+(string)$posts->elementType();     // 'App\Post'
+\Tyhp\Type::fromProperty(\App\Blog::class, 'related')->typeArguments();   // [Type for App\Blog]
+```
+
+The spelling is the format `\Tyhp\Type::parse()` reads: class names are fully qualified, structs are `struct App\Address`, and source type aliases use their registered name. A property whose type mentions a type parameter of its class (`array<T>`) has no attribute. When `fromProperty()` is called on an object of a generic class, a `T`-typed property returns the type argument bound for that object. The compiler writes the attribute; one written in source is replaced.
+
 ## Generic Interfaces
 
 Interfaces can declare generic type parameters. Classes that implement a generic interface must specify concrete type arguments, and the compiler validates that the implementing methods match the parameterized signatures.

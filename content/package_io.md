@@ -55,7 +55,7 @@ PHP does not offer non-blocking versions of every kind of I/O, so the package us
 composer require tyhp/io
 ```
 
-Version pins follow the same `80N.X.Y` scheme as the other compiled `tyhp/*` helpers, where `80N` is the PHP version your project targets (`output.phpVersion`) and `X.Y` is the package's own version (currently `0.1`). A project targeting PHP 8.4 therefore pins `"tyhp/io": "804.0.1"` or `"804.0.*"`. See [Composer Runtime Packages](project_composerPackages.md) for how these versions work. The package requires PHP 8.2 or later, `tyhp/core`, and `tyhp/async`.
+Version pins follow the same `80N.X.Y` scheme as the other compiled `tyhp/*` helpers, where `80N` is the PHP version your project targets (`output.phpVersion`) and `X.Y` is the package's own version (currently `0.3`). A project targeting PHP 8.4 therefore pins `"tyhp/io": "804.0.3"` or `"804.0.*"`. See [Composer Runtime Packages](project_composerPackages.md) for how these versions work. The package requires PHP 8.2 or later, `tyhp/core`, and `tyhp/async`.
 
 ### PHP extensions
 

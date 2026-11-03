@@ -140,6 +140,7 @@ Tyhp features that exist for type-checking often leave no (or a reduced) PHP foo
 | **`#[\Tyhp\NativeTypeTest]`** | Compile-only (`#[\Tyhp\NoEmit]`). Never appears in emitted PHP. Picks which type-guard function or concrete static method is the native `$x is T` lowering. | [Functions in Tyhpdef](tyhpdef_functions.md#native-type-tests-tyhpnativetypetest) |
 | **`#[\Tyhp\EraseGeneric]`** | Compile-only (`#[\Tyhp\NoEmit]`). Opts a property, promoted constructor parameter, or whole class out of Mechanism C property tracking. | [Generics](tyhp_0500_generics.md) |
 | **`#[\Tyhp\GenericRuntime]`** | Runtime-visible stamp on every emitted generic class/method/function (`erased`, `layouts`, optional `factory`/`binder`/`aliasFactory`). Not `NoEmit`. | [Generics](tyhp_0500_generics.md) |
+| **`#[\Tyhp\PropertyType]`** | Runtime-visible stamp on a property or promoted constructor parameter whose PHP hint loses its Tyhp type (type arguments, struct types, source type aliases). Its one argument is the full type in the `\Tyhp\Type::parse()` format (`'array<App\\Post>'`); `\Tyhp\Type::fromProperty()` reads it. Types that mention a class type parameter are not stamped. | [Generics](tyhp_0500_generics.md#declared-property-types-at-runtime) |
 | **Structs** | Declarations erased; values are associative arrays | [Structs](tyhp_0400_structs.md) |
 | **Callable signature utilities** | Compile-time only; `__CallableReturnType<T>` erases to the callable's return type (or `mixed` while `T` is still unbound); `__CallableParametersStruct<T>` / `__CallableParametersTuple<T>` erase to `array` (struct-as-array). Tuple bags use int keys `0..n-1` (`$_1`, `$_2`, … aliases, same shape family as `CallableArgs*`). `__CallableParametersRest<T>` is a pack: value-position `Rest<T> ...$args` unpacks at the call; inside a callable-shape parameter list it auto-splices. `__CallableParametersSlice<T, TStart, TMin>` selects a parameter or a tail of parameters. Rest/Slice erase to `mixed` so PHP does not demand each unpacked argument be an array. Defaulted parameters are optional struct fields at check time; optionality does not survive erasure. ExtStandard `\call_user_func` / `\call_user_func_array` / zip `\array_map` tyhpdefs use these utilities; emit is still the PHP builtins (no new `\Tyhp\*` types, no contract bump) | [New Types](tyhp_0150_newTypes.md) |
 | **`internal`** | Stripped; members emit `public`, top-level unprefixed. Omitted from `package.tyhpdef`. | [internal modifier](tyhp_3100_internalModifier.md) |
@@ -178,6 +179,7 @@ Even when the emitter does not yet `RequirePackage` a package for every call sit
 | `\Tyhp\Concerns\HasGenerics` | Trait wiring the generic bag |
 | `\Tyhp\Generic` | `Generic::bind` for PHP and foreign compiled-library sites |
 | `\Tyhp\GenericRuntime` | Runtime-visible stamp on emitted generic declarations |
+| `\Tyhp\PropertyType` | Runtime-visible declared-type stamp on properties and promoted constructor parameters |
 | `\Tyhp\Concerns\UsesPropertyAccessors` / `HasPropertyAccessors` / `HandlesGet` / `HandlesSet` / `HandlesIsset` / `HandlesUnset` / `BootsTraits` | Property-accessor polyfill concerns |
 | `\Tyhp\Contracts\{Convertible,StringConvertible,BoolConvertible,IntConvertible,FloatConvertible}` | Convert-to interfaces |
 | `\Tyhp\Exceptions\InvalidParametersForOperatorOverloadException` | Operator dispatch miss |
@@ -207,60 +209,50 @@ Contract surface for decimal operators / convert targets and direct use. The emi
 
 | FQN | Role |
 |-----|------|
-| `\Tyhp\Expression` | Expression-tree root — **Phase 2 emit target**; runtime base for `PropertyPath` |
-| `\Tyhp\Expression\ExpressionNode` (and `Expression\*` node types) | Tree nodes — **Phase 2 emit** builds these directly |
-| `\Tyhp\PropertyPath` | Property-path expressions — **Phase 1 emit target** |
+| `\Tyhp\Expression` | Expression-tree root; runtime base for `PropertyPath` |
+| `\Tyhp\Expr` | Fluent tree builder — emit target for `Expression` arguments |
+| `\Tyhp\Expression\ExpressionNode` (and `Expression\*` node types) | Tree nodes, built by `\Tyhp\Expr` |
+| `\Tyhp\PropertyPath` | Property-path expressions — emit target through `PropertyPath::on` |
 
-**Phase 1 emit ABI:** when a call argument targets `PropertyPath<callable(T): R>` and the argument is an inline property-chain `fn`, the emitter lowers to:
-
-```php
-new \Tyhp\PropertyPath(
-    \SourceType::class,   // or a builtin type string such as 'string'
-    'resultTypeString',
-    ['segment', /* … */],
-    fn (/* … */) => /* original chain */
-);
-```
-
-Constructor shape (required): `(string $sourceType, string $resultType, array $path, \Closure $callable, bool $allowEmpty = false, array $nullSafeFlags = [])`. Call sites omit `$allowEmpty`.
-
-A chain containing `?->` additionally passes the per-segment flags by name, so the runtime builds `NullSafeAccessExpression` nodes instead of `PropertyAccessExpression` for those segments:
+**PropertyPath emit ABI:** when a call argument targets `PropertyPath<callable(T): R>` and the argument is an inline property-chain `fn`, the emitter lowers to a chain with one property step per segment, ended by `backedBy` with the original `fn`:
 
 ```php
-new \Tyhp\PropertyPath(
-    \User::class,
-    '?string',
-    ['address', 'city'],
-    fn (\User $u): ?string => $u?->address?->city,
-    nullSafeFlags: [true, true],
-);
+\Tyhp\PropertyPath::on(\SourceType::class)   // or a builtin type string such as 'string'
+    ->segment
+    /* … */
+    ->backedBy(fn (/* … */): ResultType => /* original chain */);
 ```
 
-**Phase 2 emit ABI:** when a call argument targets `Expression<callable(T): R>` and the argument is an inline arrow `fn`, the emitter lowers to a root `Expression` plus nested node constructors (additive — no contract version bump):
+A segment read through `?->` is preceded by `nullSafe()`, so the runtime builds a `NullSafeAccessExpression` for that hop instead of a `PropertyAccessExpression`:
 
 ```php
-new \Tyhp\Expression(
-    body: new \Tyhp\Expression\BinaryExpression(
-        new \Tyhp\Expression\PropertyAccessExpression(
-            new \Tyhp\Expression\ParameterExpression('u', \User::class, 0),
-            'age',
-            'int'
-        ),
-        '>',
-        new \Tyhp\Expression\ConstantExpression(18, 'int'),
-        'bool'
-    ),
-    parameters: [
-        new \Tyhp\Expression\ParameterExpression('u', \User::class, 0),
-    ],
-    callable: fn (\User $u) => $u->age > 18,
-    returnType: 'bool'
-);
+\Tyhp\PropertyPath::on(\User::class)->billing->nullSafe()->city->backedBy(fn(\User $u): ?string => $u->billing?->city);
 ```
 
-Supported nested FQNs include `ParameterExpression`, `PropertyAccessExpression`, `NullSafeAccessExpression`, `MethodCallExpression`, `StaticMethodCallExpression`, `BinaryExpression`, `UnaryExpression`, `ConstantExpression`, `TernaryExpression`, `CoalesceExpression`, `ArrayAccessExpression`, `CastExpression`, `NewExpression`, and `InstanceofExpression` (Phase 3 — `$x is T` / `$x instanceof T`). Captured outer variables emit as `ConstantExpression($var, $type)`.
+**Expression emit ABI:** when a call argument targets `Expression<callable(T): R>` and the argument is an inline arrow `fn`, the emitter lowers to a `\Tyhp\Expr` chain ended by `backedBy` with the original `fn`, which returns the `\Tyhp\Expression`:
 
-`Expression` takes one type argument: the callable shape (`Expression<callable(User): string>`; `Expression<callable(): R>` for zero parameters). That shape is a checker/type-system convention; emit still constructs `new \Tyhp\Expression(...)`. No contract version bump.
+```php
+\Tyhp\Expr::param('u', \User::class)->age->gt(18)->backedBy(fn(\User $u): bool => $u->age > 18);
+```
+
+The chain uses these builder calls:
+
+- `Expr::param(name, type, index)` starts at a parameter; `index` is passed when the `fn` has several parameters.
+- A property read is a property step (`->age`), or `prop('name')` when the name matches a builder method. `nullSafe()` precedes a `?->` hop.
+- `call(name, ...args)`, `staticCall(Class::class, name, ...args)`, and `make(Class::class, ...args)` build method calls, static calls, and `new`.
+- Operators are builder methods: `gt`, `gte`, `lt`, `lte`, `eq` (`===`), `neq` (`!==`), `looseEq` (`==`), `looseNeq` (`!=`), `spaceship`, `plus`, `minus`, `times`, `dividedBy`, `mod`, `pow`, `concat`, `bitAnd`, `bitOr`, `bitXor`, `shiftLeft`, `shiftRight`, `not`, `neg`, `pos`, `bitNot`, `and`, `or`, `xor`, `coalesce`, `then` / `else`, `is`, `cast`, and `at` (array access).
+- A nested arrow `fn` is `Expr::closure([Expr::param(...), …], <body chain>, 'returnType')`, and an array literal is `Expr::arrayOf([values], [keys])`.
+- Captured variables, literals, and class constants are passed as plain PHP arguments (`->gt($minAge)`, `->value(User::FLAG)`), so their values are read when the chain runs.
+
+A nested `fn` passed to a method's `callable`, `Expression`, or `PropertyPath` parameter becomes an `Expr::closure` node:
+
+```php
+\Tyhp\Expr::param('u', \User::class)->tags->call('any', \Tyhp\Expr::closure([\Tyhp\Expr::param('t', \Tag::class)], \Tyhp\Expr::param('t', \Tag::class)->label->eq('vip'), 'bool'))->backedBy(fn(\User $u): bool => $u->tags->any(fn(\Tag $t): bool => $t->label === 'vip'));
+```
+
+Parameter types use the `\Tyhp\Type::parse()` format. A parameter whose type has type arguments or is a struct is passed as a string (`'App\Table<App\Blog>'`, `'struct App\Address'`) instead of `Fqn::class`; a property node's type is the declared property type (`\Tyhp\Type::fromProperty()`). The tree's return type comes from the backing closure's return type.
+
+`Expression` takes one type argument: the callable shape (`Expression<callable(User): string>`; `Expression<callable(): R>` for zero parameters). That shape is a checker/type-system convention; the emitted chain is the same for every shape.
 
 `nameof(fn ($x) => $x->a->b)` is a compile-time fold to the last property segment (a string literal). It does not emit `PropertyPath` / `Expression` construction.
 
@@ -282,7 +274,7 @@ Brief map from Tyhp construct → PHP runtime pattern. Goldens live under the co
 | Operators | Static/`__to*` calls via `__add`, … | `tests/conformance/story11/operator-overloads/`; [Operator Overloads](tyhp_1600_operatorOverloads.md) |
 | Generics | Erasure + optional `GenericObject` bag / `__initGenerics__tyhpGeneric` / factories | `tests/conformance/story11/generics/`; [Generics](tyhp_0500_generics.md) |
 | Property hooks (PHP &lt; 8.4) | Strip native hooks; `UsesPropertyAccessors` + `PropertyAccessor` registration; `__get_/__set_*__tyhpPropertyHook` | hook suites (native ≥ 8.4/8.5); polyfill paths in emitter |
-| Expression trees / PropertyPath | Phase 1: `new \Tyhp\PropertyPath(…)` (plus `nullSafeFlags:` for `?->` chains); Phase 2: `new \Tyhp\Expression(…)` + nested `\Tyhp\Expression\*` nodes; Phase 3: `InstanceofExpression` for `is`/`instanceof`, multi-parameter `Expression<callable(TArgs ...): TReturn>` arity (still `new \Tyhp\Expression`); `\Closure` sites → `$path->callable` | `tests/Tyhp.Tests/Emitter/PropertyPathEmitterTests.cs`, `ExpressionEmitterTests.cs`; [Parsable Lambdas](tyhp_3000_parsableLambdas.md) |
+| Expression trees / PropertyPath | `\Tyhp\PropertyPath::on(…)->segment…->backedBy($fn)` (`nullSafe()` before `?->` hops); `\Tyhp\Expr::param(…)->…->backedBy($fn)` for `Expression` (nested `fn` → `Expr::closure`); `\Closure` sites → `$path->callable` | `tests/Tyhp.Tests/Emitter/PropertyPathEmitterTests.cs`, `ExpressionEmitterTests.cs`; [Parsable Lambdas](tyhp_3000_parsableLambdas.md) |
 | PHP 8.5 surface / lower targets | Pipe, `(void)`, `clone(…)`, exit/die, attributes | `tests/conformance/story14_5/` |
 
 A thin index suite lives under `tests/conformance/story15/` (operators, extensions, generics erasure, structs, disposables, async, expression trees). Fuller emit coverage remains in `tests/conformance/story11/` and `tests/conformance/story14_5/` — see the conformance README.

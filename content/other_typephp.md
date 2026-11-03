@@ -2,7 +2,7 @@
 title: 'TypePHP (Swoole AOT)'
 ---
 
-TypePHP, formerly the Swoole AOT compiler, is an ahead-of-time compiler from the Swoole team that turns PHP-syntax source into native machine code. Tyhp and TypePHP both start from PHP syntax and add compile-time type information, but they produce very different output: Tyhp emits PHP, and TypePHP emits native binaries.
+TypePHP, formerly the Swoole AOT compiler, is an ahead-of-time compiler from the Swoole team that turns PHP-syntax source into native machine code. Tyhp and TypePHP both start from PHP syntax and add compile-time type information, but they produce very different output: Tyhp emits PHP, and TypePHP emits native binaries. It is a different project from [TypePHP (Runtime Type Checker)](other_typephp_runtime.md).
 
 ## What TypePHP Is
 

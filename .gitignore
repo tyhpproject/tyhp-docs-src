@@ -14,5 +14,9 @@ bin/
 
 node_modules/
 
-# Local-only
-.cursor/
+# Local-only, except the shared changelog rule
+.cursor/*
+!.cursor/rules/
+.cursor/rules/*
+!.cursor/rules/changelog.mdc
+*/**/.cursor/

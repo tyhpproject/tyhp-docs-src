@@ -128,8 +128,8 @@ OS:             ...
 
 Compiled projects need Composer packages such as `tyhpdef/php` (PHP builtin tyhpdefs) and `tyhp/core`. `tyhp init` adds `tyhp/core` as **`@dev`** in `require`, `tyhpdef/php` as **`@dev`** in `require-dev`, and `tyhp/compiler` in `require-dev` at the exact version of the compiler package that matches the CLI.
 
-After each build, `tyhp build` prints the other runtime packages your compiled code needs (for example `tyhp/async` when it uses `async`/`await`). When `build.updateComposer` is enabled, it writes them into the `composer.json` in `output.publishPath` and runs `composer install` there. The compiled `tyhp/*` versions it writes match `output.phpVersion` plus **that package's own** `X.Y` (`8.4` + core `0.2` → `tyhp/core: 804.0.2`). Otherwise, require them yourself. Packages you opt into, such as `tyhp/io` and `tyhp/parallel`, are never added for you; see [Runtime Packages Overview](package_intro.md).
+After each build, `tyhp build` prints the other runtime packages your compiled code needs (for example `tyhp/async` when it uses `async`/`await`). When `build.updateComposer` is enabled, it writes them into the `composer.json` in `output.publishPath` and runs `composer install` there. The compiled `tyhp/*` versions it writes match `output.phpVersion` plus **that package's own** `X.Y` (`8.4` + core `0.3` → `tyhp/core: 804.0.3`). Otherwise, require them yourself. Packages you opt into, such as `tyhp/io` and `tyhp/parallel`, are never added for you; see [Runtime Packages Overview](package_intro.md).
 
 How to pin versions for apps vs libraries is on the [Composer Runtime Packages](project_composerPackages.md) page.
 
-`tyhpdef/php` in this alpha is a **PHP 8.2 baseline**. APIs that exist only on PHP 8.3–8.5 may be missing from the stubs.
+One `tyhpdef/php` package covers PHP 8.2–8.5. APIs added in a later PHP minor are version-gated, and the compiler shows only the declarations available on your `output.phpVersion` target. See [PHP Version Gating](tyhp_0320_phpVersionGating.md). Extensions outside PHP's always-present core (for example `mbstring`, `intl`, or `pdo`) are typed by the matching `tyhpdef/php-ext-*` packages.

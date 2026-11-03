@@ -112,6 +112,22 @@ string $name = "Alice";
 string|null $alsoNullable = null;  // Also OK
 ```
 
+A value that may be `null` must be [narrowed](tyhp_0200_typeNarrowingAndGuards.md) before you read or write its properties, call its methods, or index it as a struct or `ArrayAccess` object (TYHP4198). Use `?->` when `null` should propagate instead:
+
+```tyhp
+<?tyhp
+
+function findUser(int $id): ?User { /* ... */ }
+
+$user = findUser(2);
+// echo $user->name;  // ERROR TYHP4198: $user may be null
+
+if ($user !== null) {
+    echo $user->name;  // OK: narrowed to User
+}
+echo $user?->name ?? 'guest';  // OK: null-safe access
+```
+
 ## Closure and Arrow Parameter Inference
 
 Named function and method parameters always need an explicit type. Closure and arrow-function parameters also need a type, unless the expected callable type supplies it. If there is no expected callable type (or the parameter cannot be inferred), the compiler requires an annotation.

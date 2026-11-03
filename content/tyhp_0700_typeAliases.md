@@ -226,6 +226,73 @@ type ApiPath = "api/${string}/items";
 type OptionalPrefix = "${string}?id";
 ```
 
+A hole can name another type alias, written the same way as anywhere else in type position: `${ApiMethod}`, `${App\Http\Method}`, `${self\Status}`, or `${Tagged<'a'>}`. A hole that names a template alias includes that alias's pattern, so templates compose. A hole naming an unknown type is an error.
+
+A hole must be a type whose values have a string form: `string`, `int`, `float`, a literal of one of them, a template string or symbol-name type, a type parameter constrained to one of these, or a union of them. A hole of any other type (`array`, `bool`, `null`, `mixed`, `object`, a class or enum) is an error (TYHP4199), and so is a hole written as an expression, such as `${$name}`, a call, a class constant, or an inline nested template. Give a nested template its own alias and name it in the hole:
+
+```tyhp
+<?tyhp
+
+type Version = "v${int}";
+type Release = "release-${Version}";  // OK
+type Flagged = "flag-${bool}";        // Error: TYHP4199
+```
+
+A string literal that matches the pattern is assignable to the alias, and so is a double-quoted interpolation whose literal text and holes fit it. A `${string}` hole accepts any interpolated value, including an `int`, and can cover several interpolated values and the text between them. A narrower hole, such as `${ApiMethod}`, needs an interpolated value of that type. A value that may be `null` interpolates as `''` when it is null, so it fits a narrower hole only if that hole also accepts `''` (such as `${''|int}`), and a `${string}` hole only together with other text.
+
+Numeric holes accept the text that PHP's `(string)` cast produces for a value of that type:
+
+| Hole | Accepts | Rejects |
+| --- | --- | --- |
+| `${int}` | `'3'`, `'-12'`, `'0'` | `'03'`, `'+3'`, `'-0'`, `'3.0'`, values outside the `int` range |
+| `${float}` | `'1.5'`, `'3'`, `'-0.25'`, `'1.0E+25'`, `'1.0E-5'` | `'1.50'`, `'.5'`, `'1.5e3'`, `'0.00001'` |
+| `${1\|2}` | `'1'`, `'2'` | `'01'`, `'3'` |
+
+Float text follows PHP's default `precision` of 14 significant digits. An interpolated `int` or `float` value fits a numeric hole of a type it is assignable to, and any `${string}` hole.
+
+```tyhp
+<?tyhp
+
+type ItemCount = "${int} items";
+
+function itemsOf(int $n): ItemCount {
+    return "{$n} items";
+}
+
+function firstPage(): "page-${1|2}" {
+    return 'page-1';
+}
+```
+
+```tyhp
+<?tyhp
+
+type ApiMethod = 'GET'|'POST';
+type ApiPath = "api/${string}/items";
+type UserRoute = "${ApiMethod} /users/${string}";
+type Endpoint = "${ApiMethod} ${ApiPath}";
+
+function itemsPath(string $segment): ApiPath {
+    return "api/{$segment}/items";
+}
+
+function routeForUser(ApiMethod $method, int $id): UserRoute {
+    return "{$method} /users/{$id}";
+}
+
+function itemsEndpoint(ApiMethod $method, string $segment): Endpoint {
+    return "{$method} api/{$segment}/items";
+}
+
+function broken(string $segment): ApiPath {
+    return "api/{$segment}/users"; // Error: the text after the hole does not match
+}
+
+function wrongMethod(string $method, int $id): UserRoute {
+    return "{$method} /users/{$id}"; // Error: `string` is not an ApiMethod
+}
+```
+
 ## Class-Level Type Aliases
 
 Type aliases can be declared inside a class body. Class-level type aliases support visibility modifiers (public, protected, private), controlling whether the alias is accessible outside the class. The factory is a static method on the owning class with that visibility.

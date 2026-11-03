@@ -18,16 +18,18 @@ Compiled `tyhp/*` helpers (`core`, `async`, `decimal`, `lambda`, `io`, `parallel
 
 `tyhp/compiler` is versioned with the compiler itself (`805.1.2-beta.3`), not as `80N.X.Y`. See [The tyhp/compiler Package](package_compiler.md).
 
-The compiled helpers currently ship at source version `0.1`, so the Packagist pins look like `804.0.1` for PHP 8.4 `tyhp/core`. If `tyhp/core` later becomes `1.4`, PHP 8.4 apps require `804.1.4` (or `804.1.*`). `tyhp/lambda` can be `2.0` at the same time. `tyhpdef/php` publishes the `version` in its `composer.json` (currently `0.0.2`); put it in `require-dev` as **`@dev`** rather than pinning that tag.
+The compiled helpers currently ship at source version `0.3`, so the Packagist pins look like `804.0.3` for PHP 8.4 `tyhp/core`. If `tyhp/core` later becomes `1.4`, PHP 8.4 apps require `804.1.4` (or `804.1.*`). `tyhp/lambda` can be `2.0` at the same time. `tyhpdef/php` publishes the `version` in its `composer.json` (currently `0.0.3`); put it in `require-dev` as **`@dev`** rather than pinning that tag.
 
 ## Version map (compiled `tyhp/*` helpers)
 
-| `output.phpVersion` | Package MAJOR | Pin when the package is `0.1` | Composer `php` on that artifact |
+| `output.phpVersion` | Package MAJOR | Pin when the package is `0.3` | Composer `php` on that artifact |
 |---------------------|---------------|-------------------------------|---------------------------------|
-| `"8.2"` | `802` | `802.0.1` | `>=8.2` |
-| `"8.3"` | `803` | `803.0.1` | `>=8.3` |
-| `"8.4"` | `804` | `804.0.1` | `>=8.4` |
-| `"8.5"` | `805` | `805.0.1` | `>=8.5` |
+| `"8.2"` | `802` | `802.0.3` | `>=8.2` |
+| `"8.3"` | `803` | `803.0.3` | `>=8.3` |
+| `"8.4"` | `804` | `804.0.3` | `>=8.4` |
+| `"8.5"` | `805` | `805.0.3` | `>=8.5` |
+
+Compiled `tyhp/*` helpers are not published for `"8.0"` or `"8.1"`. When the compiled code needs one of them and `build.updateComposer` would pin it from Packagist, `tyhp build` reports **TYHP7108** and leaves `composer.json` unchanged.
 
 `tyhp init` writes **`@dev`** for `tyhp/core` in `require` and for `tyhpdef/php` in `require-dev` (and `--vendor` adds the same constraint for missing runtime `tyhp/*` packages, and `@dev` in `require-dev` for missing `tyhpdef/php`). `tyhpdef/*` packages are compile-time stubs — prefer `require-dev` with `@dev`. Compiled `tyhp/*` helpers belong in `require` because emitted PHP loads them at runtime. `tyhp build` (when not using a compiler-checkout path repository, and when `build.updateComposer` writes pins) uses the pin for **each compiled** `tyhp/*` package from that package’s own `X.Y` plus your `output.phpVersion`. They do not all have to be the same version.
 
@@ -39,7 +41,7 @@ An app targets **one** PHP version. Pin compiled `tyhp/*` helpers in `require` a
 {
     "require": {
         "php": "~8.4.0",
-        "tyhp/core": "804.0.1"
+        "tyhp/core": "804.0.3"
     },
     "require-dev": {
         "tyhpdef/php": "@dev"
@@ -184,7 +186,7 @@ The first `composer require tyhp/core` often misses ambient tyhpdefs in that sam
 
 ## Path repositories (compiler checkout)
 
-If `tyhp build` can see a `tyhp-runtime-src` checkout, it pins each package’s **source** version (for example `0.1` or `0.0.2`) and adds Composer path repositories for the packages in it. It finds the checkout through the `TYHP_RUNTIME_SRC` environment variable (the checkout or its `packages` directory), otherwise a sibling `tyhp-runtime-src/packages` directory found by walking up from the compiler’s directory or the current directory. That is only for developing against the runtime packages themselves. Packagist consumers of compiled `tyhp/*` helpers use the `80N.X.Y` form. Packagist consumers of `tyhpdef/*` typically use `@dev` in `require-dev`; the published tag is the source version (currently `0.0.2` for `tyhpdef/php`).
+If `tyhp build` can see a `tyhp-runtime-src` checkout, it pins each package’s **source** version (for example `0.3` or `0.0.3`) and adds Composer path repositories for the packages in it. It finds the checkout through the `TYHP_RUNTIME_SRC` environment variable (the checkout or its `packages` directory), otherwise a sibling `tyhp-runtime-src/packages` directory found by walking up from the compiler’s directory or the current directory. That is only for developing against the runtime packages themselves. Packagist consumers of compiled `tyhp/*` helpers use the `80N.X.Y` form. Packagist consumers of `tyhpdef/*` typically use `@dev` in `require-dev`; the published tag is the source version (currently `0.0.3` for `tyhpdef/php`).
 
 :::tip
 `output.phpVersion` in `tyhp.json` chooses the emitted PHP **and** the `80N` prefix on compiled `tyhp/*` helpers. Each `tyhp/*` package’s `X.Y` is independent. `tyhpdef/*` packages are not prefixed.

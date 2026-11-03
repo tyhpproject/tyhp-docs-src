@@ -1,0 +1,24 @@
+---
+description: Add a CHANGELOG.md line with each notable docs change; review the entries in commits the user asks for and when running scripts/publish-docs.sh
+alwaysApply: true
+---
+
+# CHANGELOG.md
+
+`CHANGELOG.md` (Keep a Changelog) lists changes readers of [tyhplang.com](https://tyhplang.com) notice, plus generator changes that affect the site. It covers this repo only. The compiler, runtime packages, AI dev guide, IDE clients, and examples have their own changelogs; a docs page describing a new compiler feature is logged here as a docs change.
+
+## When you make a change
+
+- When a change you make is notable to site readers (or, for the generator and scripts, to maintainers), add one line for it under `## [Unreleased]` as part of the same change, before you report the work done. Use the matching group: `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`. Create the group if it is missing.
+- Write for site readers: new, rewritten, moved, or removed pages; corrected behavior descriptions; navigation, search, or layout changes. Name the page when it helps.
+- Regenerated `output/` or `output.zip`, vendored updates, typo fixes, and generator refactors with no visible change may be left out.
+- Editing `CHANGELOG.md` is a normal file edit and needs no commit. Re-read the file right before editing, since other agents may be adding entries.
+
+## When the user asks you to commit
+
+- Review the `[Unreleased]` entries against the diff being committed rather than writing them from scratch: add lines for changes that have none, and condense or correct lines the diff no longer matches. Keep entries for other in-progress work.
+- Include the CHANGELOG edit in the commit the user asked for. Never commit just to update it.
+
+## When the user asks you to publish
+
+`scripts/publish-docs.sh` builds the site and pushes the HTML to `tyhpproject/tyhp-docs`. The docs are not versioned. When running a publish the user asked for, move the `[Unreleased]` entries under `## YYYY-MM-DD` (publish date) and leave an empty `## [Unreleased]` above it. Commit that edit only when the user asks.
