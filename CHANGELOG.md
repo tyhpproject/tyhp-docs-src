@@ -6,6 +6,7 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ### Added
 
+- Emitted Docblocks and Templates: PHPStan/Psalm tags on compiled PHP (`emit.docblocks`, `emit.docblockDialect`), and `<?=` as a Tyhp echo with inline HTML in `.tyhp` files.
 - Parsable Lambdas and Expression Trees: a Nested Lambdas section, and array literals and `?->` method calls in the list of supported expressions.
 - The tyhp/lambda Package: reference entries for `LambdaExpression`, `ArrayExpression`, and `NullSafeMethodCallExpression`, their serialized forms, and `ExpressionShape` / `ExpressionSerializer::shapeKey()` for caching a translation per tree shape.
 - Generics: a Declared property types at runtime section on `#[\Tyhp\PropertyType]` and `\Tyhp\Type::fromProperty()`.
@@ -18,6 +19,7 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ### Changed
 
+- Project Options, CLI: Build, the Interop Contract, FAQ: General, What is Tyhp?, the Open Tag page, Lost and Changed Functionality, and the Quick Reference: `emit.docblocks` and `emit.docblockDialect`, running PHPStan or Psalm on emitted PHP, and `<?=` in a `.tyhp` file as a Tyhp echo. Roadmap no longer lists those docblocks as unscheduled.
 - The Open Tag page and Project Options: in a tagless project, a `.tyhp` file starting with `<?tyhp` is a tagged template (an empty first section is allowed, then inline HTML and `<?=` in source order, including inside a function or control-flow block, and a later `<?tyhp`). Any other `.tyhp` file is parsed with no open tag, so `<?tyhp` there is not accepted. `<?php` blocks report TYHP2005.
 - The with Keyword, Build Configuration, Project Options, and PHP Magic Methods: readonly `new … with` and `clone … with` below PHP 8.3 report TYHP4400; `clone … with` on a `readonly class` below 8.5 reports TYHP4401. The experimental flag covers PHP 8.3–8.4 on a class that is not readonly. Diagnostic Code Reference regenerated, including TYHP4400 and TYHP4401.
 - Roadmap: Tier 2 is marked done, Tier 3 adds promise interop, a new Future Plans section lists unscheduled features, and the runtime package list includes `tyhp/io`, `tyhp/parallel`, `tyhp/compiler`, and the `tyhpdef/php-ext-*` packages.

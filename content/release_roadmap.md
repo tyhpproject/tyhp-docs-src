@@ -75,7 +75,6 @@ The two flagships are **Story 08 — the type checker** (the correctness engine 
 
 These ideas are planned after Tier 3. None has a release target yet, and their order depends on feedback.
 
-- **Static-analysis docblocks in emitted PHP:** generate `@param`, `@return`, `@var`, `@template`, `@extends`, and `@implements` tags (including array shapes and `class-string`), so PHPStan, Psalm, and PhpStorm see the same types the Tyhp checker proved.
 - **Conditional return types:** `T extends X ? A : B`, a `match (T) { … }` form for multi-way cases, and flag-presence checks for bitmask arguments such as `JSON_THROW_ON_ERROR`. Overloads become shorthand for the same checker model. A later version adds `infer`, opt-in distribution over unions, and recursive conditional types.
 - **Opt-in runtime checks:** at public PHP-callable boundaries, check struct shapes (and later generic bounds) that the compiler already verified in Tyhp code.
 - **Compiler plugins:** Composer-packaged plugins that add checks, emit hooks, and custom syntax islands.

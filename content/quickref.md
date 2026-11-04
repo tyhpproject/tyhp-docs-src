@@ -17,6 +17,20 @@ declare(output_file='public/index.php');
 $greeting = 'Hello, Tyhp!';
 ```
 
+## Templates
+
+In a `.tyhp` file, HTML between `<?tyhp` blocks is emitted as written, and `<?= expr ?>` is a Tyhp echo (checked as Tyhp, emitted as `echo`, no escaping). Loops and conditionals use `<?tyhp` blocks. `.php` files keep a PHP `<?=`.
+
+<a href="tyhp_0010_templates.html">See full documentation →</a>
+
+```tyhp
+<?tyhp
+
+function userCard(Person $user): void { ?>
+    <h1><?= $user->name ?></h1>
+<?tyhp }
+```
+
 ## PHP Version Gating
 
 `declare(php="…")` and `#[\Tyhp\Php("…")]` filter declarations against `output.phpVersion` (Composer constraints; `"8.2"` means `8.2.*`). File-level inactive declare skips the file silently. `output.phpVersion` is the oldest PHP the build runs on: a gate true for every later version emits nothing, and one true for only some emits a `\PHP_VERSION_ID` check. `#[\Tyhp\Php]` is illegal on `struct` / `extension` (**TYHP4304**), and in `.tyhp` on a property, class constant, enum case, or interface method (**TYHP4371**). Omit `output.phpVersion` → default `"8.2"` and one **TYHP4306** warning.
@@ -643,6 +657,6 @@ All PHP magic methods are supported with additional type safety. `mixed`-returni
 
 ## Lost and Changed Functionality
 
-Tyhp disables `eval()`, short open tags (`<?`), and untyped catch blocks. Undeclared property writes are allowed only on exact `\stdClass`; other types declare properties or use `__get`/`__set`. All types must be declared or inferred. All catch blocks require a typed variable. Dynamic features require type narrowing.
+Tyhp disables `eval()` and a bare `<?` short open tag. In a `.tyhp` file, `<?=` is a Tyhp echo. Undeclared property writes are allowed only on exact `\stdClass`; other types declare properties or use `__get`/`__set`. All types must be declared or inferred. All catch blocks require a typed variable. Dynamic features require type narrowing.
 
 <a href="tyhp_2900_lostFunctionality.html">See full documentation →</a>

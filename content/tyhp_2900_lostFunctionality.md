@@ -29,19 +29,17 @@ The eval() function is discouraged in Tyhp. It is a security risk (arbitrary cod
 
 If you absolutely need eval-like functionality, write that code in a plain PHP file and declare it into your Tyhp project via a tyhpdef file. This keeps the security boundary clear and the eval usage isolated from type-checked code. `build.allowEval` only suppresses the informational diagnostic; it does not change how eval behaves at runtime.
 
-## Short Open Tags — Disabled
+## Short Open Tags
 
-Short open tags (<?) and echo short tags (<?=) are not supported in Tyhp. Tyhp files must use the <?tyhp opening tag. PHP files in the same project can still use <?php.
+A bare `<?` is not a PHP short open tag. `<? echo 'hello'; ?>` is not accepted. Tyhp statements use `<?tyhp`.
+
+In a `.tyhp` file, `<?= expr ?>` is a Tyhp echo: the expression is parsed and checked as Tyhp and emitted as `echo`, with no escaping. Tyhp keywords such as `is`, `typeof`, `with`, and `nameof` work inside it. In a `.php` file, `<?=` stays a PHP echo. See [Templates](tyhp_0010_templates.md).
 
 ```tyhp
-// ERROR: Short open tags are not valid in Tyhp
-// <? echo 'hello'; ?>
-// <?= $variable ?>
-
-// CORRECT: Use <?tyhp for Tyhp files
 <?tyhp
-echo 'hello';
-echo $variable;
+$title = 'hello';
+?>
+<p><?= $title ?></p>
 ```
 
 ## Dynamic Properties — Restricted
@@ -399,7 +397,7 @@ The following PHP features work the same in Tyhp, with no extra restrictions.
 The following table summarizes the status of each changed feature, why it is restricted, and the Tyhp alternative.
 
 - eval() — INFO 4800 — Security risk, impossible to type-check — suppressed by `build.allowEval`; alternative: write PHP and declare via tyhpdef
-- Short open tags (<?, <?=) — DISABLED — Use <?tyhp instead
+- Short open tag (`<?`) — not a PHP short open tag — use `<?tyhp`. `<?=` in a `.tyhp` file is a Tyhp echo; in a `.php` file it stays a PHP echo
 - Dynamic properties — RESTRICTED — Undeclared writes only on exact `\stdClass`; other types (including `extends \stdClass`) declare properties or use `__get`/`__set` (TYHP4134). `(object)` converts non-objects to `\stdClass` and is identity on existing objects
 - Nested named functions/methods — DISABLED — Use a private method or a closure assigned to a typed local
 - Variable variables ($$var) — DISABLED — TYHP4133; use `variable_exists($name)` on a simple variable
@@ -433,7 +431,7 @@ Using eval() without intending to. eval() is an informational diagnostic (TYHP48
 :::
 
 :::danger
-Using <? or <?= in Tyhp files. Always use <?tyhp as the opening tag for Tyhp source files.
+Using a bare `<?` short open tag. Statements use `<?tyhp`. In a `.tyhp` file, `<?=` is the Tyhp echo used by templates.
 :::
 
 :::danger

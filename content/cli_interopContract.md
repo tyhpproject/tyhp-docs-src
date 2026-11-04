@@ -262,6 +262,18 @@ When a `PropertyPath` / `Expression` value is passed where `\Closure` is expecte
 
 Feature detail: [Parsable Lambdas](tyhp_3000_parsableLambdas.md).
 
+## Emitted docblocks
+
+PHP that calls compiled Tyhp, and PHPStan or Psalm run on that PHP, can rely on docblock tags wherever the native declaration drops a type Tyhp checked. The tags are on in every build profile and do not depend on `output.comments`.
+
+`emit.docblocks` defaults to `"lossy-only"`: a tag is written only when it says more than the PHP hint (`array<int, User>` becomes native `array` plus `@param array<int, \App\User>`). `"all"` tags every signature type. `"off"` writes none of the generated tags. `emit.docblockDialect` (`"both"` by default, or `"phpstan"`, `"psalm"`, `"phpdoc"`) is parsed and validated and does not change the text. Shared tags are unprefixed.
+
+What a consumer can rely on, when the checker had the type: `@param`, `@param-out` for a by-ref parameter, `@return`, `@var`, `@template` (with `of`, variance, and a default when the parameter has them), `@extends`, `@implements`, `@use`, and `@internal`. `@throws` is not generated; an author `@throws` is kept. Symbol names in generated tags are fully qualified, and a `use … as` alias is the real name. `self`, `parent`, and `static` stay relative. A struct is `array{…}` with optional keys as `key?:`. A callable is `callable(int): string`. `class-string` is used for a class, interface, or enum name.
+
+An author docblock's summary stays above the tags. `@tyhp` emitter directives and `/@@ … @@/` blocks pass through. An author analysis tag wins per key; the generator fills gaps. `output.comments: false` drops the prose and keeps the directives and the analysis tags.
+
+The compiler does not run PHPStan or Psalm. The full spelling and merge rules are on [Emitted Docblocks](cli_emittedDocblocks.md).
+
 ## Lowering protocols (index)
 
 Brief map from Tyhp construct → PHP runtime pattern. Goldens live under the conformance suite; prefer those over re-deriving internals from this page.

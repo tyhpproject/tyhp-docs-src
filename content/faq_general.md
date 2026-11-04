@@ -30,6 +30,14 @@ Most Tyhp features are compile-time only. Types, generics, and type guards are e
 
 PHPStan and Psalm analyze existing PHP code using annotations (PHPDoc comments) to find type errors. Tyhp is a separate language — a superset of PHP — with type syntax in the grammar, not comments. It can also add constructs (generics, structs, operator overloads, async/await) that a PHP analyzer cannot, because those tools cannot change PHP’s syntax. Tyhp’s compile-time checking is mandatory; you cannot ignore type errors the way you can with analyzer baselines.
 
+The emitted PHP still carries PHPStan and Psalm tags where a native declaration drops a type Tyhp checked (generics, array shapes, `class-string`, callable signatures). Run PHPStan or Psalm on that PHP if you want those tools in CI. Tyhp does not run them. See [Emitted Docblocks](cli_emittedDocblocks.md).
+
+## Can I run PHPStan or Psalm on Tyhp output?
+
+Yes. `tyhp build` writes ordinary PHP. Point PHPStan or Psalm at the output directory (`output.path`, default `build/`). With the default `emit.docblocks` of `"lossy-only"`, a tag is present when the PHP hint is lossier than the checked type, on every build profile, including `release`. `"emit": { "docblocks": "off" }` leaves those generated tags out. `emit.docblockDialect` accepts `"phpstan"`, `"psalm"`, `"both"` (the default), or `"phpdoc"` and does not change the tags: shared syntax is unprefixed.
+
+An author docblock's summary stays. An author `@param`, `@return`, or `@throws` is kept; the generator fills tags the author did not write. `@throws` is not generated for you. `output.comments: false` drops the summary and keeps the analysis tags.
+
 ## Can I use Composer packages with Tyhp?
 
 Yes. Since Tyhp compiles to standard PHP, Composer packages work exactly as they do in PHP. To get type-checking for a Composer package, provide tyhpdef files that describe the package's types. After `composer install`, `tyhp generate_tyhpdef --vendor` (also run from `post-autoload-dump`) prefers published `tyhpdef/*` companions and otherwise writes stubs into `vendor-tyhpdef/`. You can also generate a single package with `--package-path=…`, or write the members you call by hand as overlays. PHP builtins come from the `tyhpdef/php` package.

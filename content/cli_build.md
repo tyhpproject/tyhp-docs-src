@@ -65,8 +65,15 @@ The build action reads configuration from the tyhp.json project file. Key config
 - output.publishContent — Array of copy rules for extra files written into `output.publishPath` after emit. `src` / `dst` / `exclude` interpolate; `dst` may also use per-file variables such as `{fileName}`. See [Project Options List](project_optionsList.md#string-interpolation).
 - output.phpVersion — Target PHP version: "8.0" through "8.5". If omitted, defaults to **"8.2"** and emits warning **TYHP4306** once per compilation. This is the compiler check/emit target, not the managed PHP used by `tyhp generate_tyhpdef`. For `tyhpdef/php` / `tyhpdef/php-ext-*`, it also selects which version-gated APIs are visible (8.2–8.5 matrix). `{phpVersion.id}` in other keys is the Tyhp PHP id (`"8.2"` → `802`). See [CLI: Lint](cli_lint.md#php-version-matrix-8285).
 - output.strictTypes — Add declare(strict_types=1) to all output files (default: true).
-- output.comments — Include comments from source in the output (default: true).
+- output.comments — Include comments from source in the output (default: true). `false` drops summary prose and keeps emitter directives and analysis tags. See [Emitted Docblocks](cli_emittedDocblocks.md).
 - output.namespacePrefix — Optional prefix added to all namespaces in output.
+
+## Emit Configuration
+
+- emit.docblocks — PHPStan/Psalm tags where the native PHP declaration drops type information: `"lossy-only"` (default), `"all"`, or `"off"`. On in every build profile (`debug`, `balanced`, `release`), independent of `output.comments`. `"off"` emits no generated docblocks.
+- emit.docblockDialect — `"both"` (default), `"phpstan"`, `"psalm"`, or `"phpdoc"`. Parsed and validated. It does not change the tags. Shared syntax is unprefixed; a `@phpstan-` or `@psalm-` prefix is used only where the dialects diverge.
+
+An invalid value for either key is warning **TYHP6003**, and the default is kept. See [Emitted Docblocks](cli_emittedDocblocks.md) and [Project Options List](project_optionsList.md#emit-options).
 
 ## Build Configuration
 

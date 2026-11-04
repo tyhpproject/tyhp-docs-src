@@ -128,7 +128,25 @@ Type: `string | null` (default: `null`). A namespace prefix added to or stripped
 :::
 
 :::member[output.comments]
-Type: `bool` (default: `true`). Controls whether comments from the Tyhp source are preserved in the compiled PHP output. Set to `false` to strip comments for smaller output.
+Type: `bool` (default: `true`). Controls whether comments from the Tyhp source are preserved in the compiled PHP output. Set to `false` to drop summary prose for smaller output. Emitter directives (`@tyhp…`, `/@@ … @@/` blocks) and analysis tags stay, including author tags such as repeated `@throws` and the generated PHPStan/Psalm tags. See [Emitted Docblocks](cli_emittedDocblocks.md).
+:::
+
+## Emit Options
+
+These options are nested under the `"emit"` key in `tyhp.json`. Generated docblocks are written in every build profile (`debug`, `balanced`, and `release`) and do not depend on `output.comments`.
+
+:::member[emit.docblocks]
+Type: `string` (default: `"lossy-only"`). Static-analysis tags (`@param`, `@return`, `@var`, `@template`, and the related tags) generated from checked types.
+
+- `"lossy-only"` writes a tag only when the native PHP declaration drops type information.
+- `"all"` writes a tag for every signature type.
+- `"off"` writes no generated docblocks, including generated `@template` tags and `@property` tags for lowered property hooks.
+
+An invalid value is warning **TYHP6003**, and the default is kept. See [Emitted Docblocks](cli_emittedDocblocks.md).
+:::
+
+:::member[emit.docblockDialect]
+Type: `string` (default: `"both"`). `"phpstan"`, `"psalm"`, `"both"`, or `"phpdoc"`. Parsed and validated (an invalid value is warning **TYHP6003**). The setting does not change the emitted tags. Shared syntax is unprefixed. A `@phpstan-` or `@psalm-` prefix is used only where the dialects diverge, and no tag written today needs one.
 :::
 
 ## Build Options
@@ -311,6 +329,11 @@ Below is a comprehensive `tyhp.json` showing all available options with their de
         "strictTypes": true,
         "namespacePrefix": null,
         "comments": true
+    },
+
+    "emit": {
+        "docblocks": "lossy-only",
+        "docblockDialect": "both"
     },
 
     "build": {

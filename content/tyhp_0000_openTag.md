@@ -6,7 +6,7 @@ status:
   state: complete
 ---
 
-Two of the first differences you will notice in Tyhp are a new open tag and a new file extension. These allow the Tyhp compiler to distinguish Tyhp code from PHP code and apply its type-checking and compilation rules only to the appropriate sections. The new open tags work the same way as the existing PHP open tag `<?php`. The echo open tag `<?=` is PHP echo mode (not Tyhp). A bare `<?` is not a PHP short open tag — Tyhp uses `<?` only as the start of `<?tyhp`, `<?tyhpdef`, or `<?php`.
+Two of the first differences you will notice in Tyhp are a new open tag and a new file extension. These allow the Tyhp compiler to distinguish Tyhp code from PHP code and apply its type-checking and compilation rules only to the appropriate sections. The new open tags work the same way as the existing PHP open tag `<?php`. In a `.tyhp` file, `<?=` is a Tyhp echo: the expression is parsed and checked as Tyhp and emitted as `echo`. In a `.php` file, `<?=` stays a PHP echo. A bare `<?` is not a PHP short open tag — Tyhp uses `<?` only as the start of `<?tyhp`, `<?tyhpdef`, or `<?php`. See [Templates](tyhp_0010_templates.md).
 
 ## The `<?tyhp` Open Tag
 
@@ -55,7 +55,7 @@ Set `"source": { "tagless": true }` in `tyhp.json` (or `source.tagless` on a pac
 
 In a tagless project, a `.tyhp` file whose first six characters are exactly `<?tyhp` is parsed as a normal tagged `.tyhp` file. Any other `.tyhp` file is code and is parsed with no open tag. A blank line or any text before `<?tyhp` keeps that entry, so `<?tyhp` is not accepted there. A leading `<div>` or `<?=` is a syntax error.
 
-A template can therefore have an empty first section (`<?tyhp ?>` or `<?tyhp?>`). After `?>` the file can hold inline HTML and `<?= … ?>`, and `<?tyhp` opens another section later. Inline HTML and echoes are emitted in source order, including inside functions and control-flow blocks, and the `<?=` expressions are type-checked. A `<?php` block in a `.tyhp` file is an error (TYHP2005).
+A template can therefore have an empty first section (`<?tyhp ?>` or `<?tyhp?>`). After `?>` the file can hold inline HTML and `<?= … ?>`, and `<?tyhp` opens another section later. Inline HTML and echoes are emitted in source order, including inside functions and control-flow blocks. Each `<?= … ?>` is a Tyhp echo: parsed and checked as Tyhp, emitted as `echo`, with no escaping. A `<?php` block in a `.tyhp` file is an error (TYHP2005). See [Templates](tyhp_0010_templates.md).
 
 ```tyhp
 <?tyhp
@@ -137,7 +137,7 @@ The emitter writes the `require_once` into the PHP output. Do not put `require_o
 
 ## How the Compiler Distinguishes Tyhp from PHP
 
-The lexer recognizes the tag that follows `<?` and sets an internal language mode accordingly. When it sees `<?tyhp` followed by whitespace, it emits a `T_TYHP_OPEN_TAG` token and enters Tyhp mode. When it sees `<?tyhpdef` followed by whitespace, it emits a `T_TYHPDEF_OPEN_TAG` token and enters Tyhpdef mode. When it sees `<?php`, it emits the standard `T_OPEN_TAG` token and enters PHP mode. When it sees `<?=`, it enters PHP echo mode (`phpEcho`). A bare `<?` that is not followed by `tyhp`, `tyhpdef`, or `php` is not a PHP short open tag. This language mode determines which keywords are active -- for example, `struct`, `async`, `await`, `is`, `typeof`, and `nameof` are only recognized as keywords in Tyhp mode.
+The lexer recognizes the tag that follows `<?` and sets an internal language mode accordingly. When it sees `<?tyhp` followed by whitespace, it emits a `T_TYHP_OPEN_TAG` token and enters Tyhp mode. When it sees `<?tyhpdef` followed by whitespace, it emits a `T_TYHPDEF_OPEN_TAG` token and enters Tyhpdef mode. When it sees `<?php`, it emits the standard `T_OPEN_TAG` token and enters PHP mode. In a `.tyhp` file, `<?=` stays in Tyhp mode, so `is`, `typeof`, `with`, and `nameof` work inside the echo. In a `.php` file, `<?=` is a PHP echo. A bare `<?` that is not followed by `tyhp`, `tyhpdef`, or `php` is not a PHP short open tag. This language mode determines which keywords are active -- for example, `struct`, `async`, `await`, `is`, `typeof`, and `nameof` are only recognized as keywords in Tyhp mode.
 
 ## PHP Code Belongs in `.php` Files
 
@@ -199,7 +199,7 @@ Don't put `<?php` blocks in a `.tyhp` file. Write PHP code in a `.php` file inst
 :::
 
 :::danger
-Don't use `<?=` expecting Tyhp mode — that is PHP echo mode. Don't write a bare `<?` as a PHP short open tag; it is not treated as PHP. Use `<?tyhp` (or tagless source) for Tyhp, and `<?php` only in `.php` files.
+Don't write a bare `<?` as a PHP short open tag; it is not treated as PHP. In a `.tyhp` file, `<?=` is a Tyhp echo, and Tyhp statements still use `<?tyhp` (or tagless source). Use `<?php` only in `.php` files. In a `.php` file, `<?=` stays a PHP echo.
 :::
 
 :::danger

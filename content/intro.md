@@ -30,7 +30,7 @@ All type checking in Tyhp happens at compile time. Tyhp-only type syntax is eras
 
 PHP checks type declarations when the code runs. Static analyzers such as PHPStan and Psalm catch more before that, but generics, array shapes, and similar types live in PHPDoc comments.
 
-Tyhp makes those types part of the language. The compiler checks types, nullability, and generic constraints, and does not emit PHP until the program type-checks. Type errors in `.tyhp` files are compile errors, and you adopt Tyhp file by file instead of baselining existing issues. Tyhp does not replace the PHP runtime: you deploy the compiled output on the PHP you already run.
+Tyhp makes those types part of the language. The compiler checks types, nullability, and generic constraints, and does not emit PHP until the program type-checks. Type errors in `.tyhp` files are compile errors, and you adopt Tyhp file by file instead of baselining existing issues. Tyhp does not replace the PHP runtime: you deploy the compiled output on the PHP you already run. Where a PHP declaration drops a type the checker proved, the emitted file keeps a PHPStan/Psalm tag so those tools can see it. See [Emitted Docblocks](cli_emittedDocblocks.md).
 
 - Build-time errors — type and null errors are reported before the code runs
 - Types in the syntax — generics, structs, and type aliases are part of the language, not PHPDoc comments

@@ -45,6 +45,7 @@
             "section": "Tyhp",
             "items": [
                 "tyhp_0000_openTag.md",
+                "tyhp_0010_templates.md", // <?= in .tyhp files, inline HTML
                 "tyhp_0100_typesAndLocals.md",
                 "tyhp_0150_newTypes.md", // the decimal type, nd other new types
                 "tyhp_0151_newFunctions.md", // new functions
@@ -138,6 +139,7 @@
                 "cli_build.md", // build
                 "cli_composer.md", // tyhp composer / sync / extra.tyhp.require
                 "cli_interopContract.md", // interop contract
+                "cli_emittedDocblocks.md", // PHPStan/Psalm tags on emitted PHP
                 "cli_lint.md", // lint
                 "cli_languageServer.md", // language server
                 "cli_xdebugProxy.md", // xdebug proxy
