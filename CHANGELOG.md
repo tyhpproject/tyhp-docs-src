@@ -19,6 +19,7 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ### Changed
 
+- Previous Releases, What is Tyhp?, Installing Tyhp, Release Planning, Roadmap, and Composer Runtime Packages: the current compiler is 805.1.2-beta.4.
 - Project Options, CLI: Build, the Interop Contract, FAQ: General, What is Tyhp?, the Open Tag page, Lost and Changed Functionality, and the Quick Reference: `emit.docblocks` and `emit.docblockDialect`, running PHPStan or Psalm on emitted PHP, and `<?=` in a `.tyhp` file as a Tyhp echo. Roadmap no longer lists those docblocks as unscheduled.
 - The Open Tag page and Project Options: in a tagless project, a `.tyhp` file starting with `<?tyhp` is a tagged template (an empty first section is allowed, then inline HTML and `<?=` in source order, including inside a function or control-flow block, and a later `<?tyhp`). Any other `.tyhp` file is parsed with no open tag, so `<?tyhp` there is not accepted. `<?php` blocks report TYHP2005.
 - The with Keyword, Build Configuration, Project Options, and PHP Magic Methods: readonly `new … with` and `clone … with` below PHP 8.3 report TYHP4400; `clone … with` on a `readonly class` below 8.5 reports TYHP4401. The experimental flag covers PHP 8.3–8.4 on a class that is not readonly. Diagnostic Code Reference regenerated, including TYHP4400 and TYHP4401.

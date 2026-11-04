@@ -8,7 +8,7 @@ status:
 
 Tyhp is built in a deliberately ordered sequence of stories, grouped into four tiers. The guiding principle is a thin vertical slice that compiles and runs end-to-end as early as possible.
 
-**This beta (805.1.2-beta.3)** completes Tiers 0–2, apart from the deferred web playground (Story 22). Tier 3 is next. Features listed under Tier 3 and Future Plans are not in this beta.
+**This beta (805.1.2-beta.4)** completes Tiers 0–2, apart from the deferred web playground (Story 22). Tier 3 is next. Features listed under Tier 3 and Future Plans are not in this beta.
 
 Stories are numbered contiguously from 01 to 30 with additive sub-stories (`08.5`, `10.5`, `14.5`, `16.5`, `19.5`, `20.5`, `24.1`, `27.1`, `27.2`, `27.3`). Each documentation page carries a Tier/Story badge.
 

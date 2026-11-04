@@ -2,11 +2,17 @@
 title: 'Previous Releases'
 ---
 
-## 805.1.2-beta.3 (current public beta)
+## 805.1.2-beta.4 (current public beta)
 
-Patch on the public beta. GitHub Release tag `v805.1.2-beta.3`. MAJOR `805` means the emit ceiling is PHP 8.5 (the compiler still targets 8.2–8.4 via `output.phpVersion`). Compiled `tyhp/*` runtime helpers version independently as `80N.X.Y` (source `0.3` → `802.0.3`–`805.0.3` for `tyhp/core`). `tyhpdef/*` packages use the version in that package’s `composer.json`.
+Patch on the public beta. GitHub Release tag `v805.1.2-beta.4`. MAJOR `805` means the emit ceiling is PHP 8.5 (the compiler still targets 8.2–8.4 via `output.phpVersion`). Compiled `tyhp/*` runtime helpers version independently as `80N.X.Y`. `tyhpdef/*` packages use the version in that package’s `composer.json`.
+
+Emitted PHP can include PHPStan and Psalm docblocks. In a `.tyhp` file, `<?=` is a Tyhp echo and inline HTML stays in source order. Expression trees accept nested arrow functions, array literals, and `?->` method calls. A double-quoted interpolation that fits a template string type is assignable to it. Reading through a possibly null value without narrowing it reports TYHP4198, and a `?->` read is nullable. Readonly classes follow PHP, including a generic `readonly class` on PHP 8.2. `EventLoop::run` accepts `Promise<void>`.
 
 This is a **prerelease**. Semver compatibility guarantees apply from the first stable `805.N.N`, not from beta. See [Roadmap](release_roadmap.md) and [Release Planning](release_planning.md).
+
+## 805.1.2-beta.3
+
+Patch on the public beta. GitHub Release tag `v805.1.2-beta.3`. MAJOR `805` means the emit ceiling is PHP 8.5 (the compiler still targets 8.2–8.4 via `output.phpVersion`). Compiled `tyhp/*` runtime helpers version independently as `80N.X.Y` (source `0.3` → `802.0.3`–`805.0.3` for `tyhp/core`). `tyhpdef/*` packages use the version in that package’s `composer.json`.
 
 ## 805.1.1-beta.3
 
@@ -16,6 +22,7 @@ An untyped local initialized with a literal now keeps the widened scalar as its 
 
 | Version | Notes |
 |---------|--------|
+| 805.1.2-beta.4 | Public beta. Docblocks on emitted PHP, Tyhp `<?=` echoes, expression-tree additions, template-string assignability, null-safe checks, and readonly-class fixes. |
 | 805.1.2-beta.3 | Public beta. |
 | 805.1.1-beta.3 | Public beta. Checker fixes for literal-initialized locals and tyhpdef backed enums. |
 | 805.1.0-beta.3 | Public beta. Bug fixes and updates. |
