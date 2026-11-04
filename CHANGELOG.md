@@ -4,6 +4,8 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ## [Unreleased]
 
+## 2026-11-04
+
 ### Added
 
 - Emitted Docblocks and Templates: PHPStan/Psalm tags on compiled PHP (`emit.docblocks`, `emit.docblockDialect`), and `<?=` as a Tyhp echo with inline HTML in `.tyhp` files.
