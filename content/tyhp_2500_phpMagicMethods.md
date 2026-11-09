@@ -198,7 +198,7 @@ See [Object Declaration Changes](tyhp_1300_newObjectDeclSyntax.md#property-acces
 
 ## Auto-Generated Magic Methods for Generics
 
-When a class uses generics with runtime type tracking, the Tyhp compiler adds the `HasGenerics` trait from the tyhp/core package (`\Tyhp\Concerns\HasGenerics`). `Concerns\GenericObject` is the legacy name. The compiler also auto-generates constructor logic to initialize the generic type information (`__initGenerics__tyhpGeneric` and `$this->__tyhpGeneric->init(...)`).
+When a class uses generics with runtime type tracking, the Tyhp compiler adds the `HasGenerics` trait from the tyhp/core package (`\Tyhp\Concerns\HasGenerics`). `Concerns\GenericObject` is the legacy name. The class stamp is `layouts: [1]`. The compiler also auto-generates the layout-1 init hook `__initGenerics__tyhpGeneric` and the bag `$this->__tyhpGeneric`. PHP calls `Box::new(T::int)(42)` and `Box::type(T::int)`. A magic method cannot declare type parameters (TYHP4404). A method named `new` or `type` on a generic class, or on an ancestor, is TYHP4406.
 
 Tracking is on when the class uses `typeof(T)` / `default(T)` / `is T` / `new T()` / forwarded type arguments, or when it has a generic-typed instance property (including promoted constructor properties) that is not opted out with `#[\Tyhp\EraseGeneric]`. Mixed mode is allowed: the class stays tracked while opted-out properties skip set checks. Fully erased generic classes emit **no** trait. The attribute is not inherited.
 

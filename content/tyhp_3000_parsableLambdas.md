@@ -282,7 +282,7 @@ Represents a null-safe property access (`$x?->address`). Properties: `Expression
 :::
 
 :::member[MethodCallExpression]
-Represents a method call (`$x->getFullName()`). Properties: `ExpressionNode $object`, `string $method`, `array<ExpressionNode> $arguments`. `nodeType`: `methodCall`.
+Represents a method call (`$x->getFullName()`). An extension method call is the same node: `$title->startsWith($prefix)` has method `startsWith`, and the extension body is not substituted into the tree. Properties: `ExpressionNode $object`, `string $method`, `array<ExpressionNode> $arguments`. `nodeType`: `methodCall`.
 :::
 
 :::member[StaticMethodCallExpression]
@@ -368,6 +368,12 @@ $query->where(fn ($u) => $u->getFullName() === 'Ada Lovelace');
 
 $query->where(\Tyhp\Expr::param('u', \User::class)->call('getFullName')->eq('Ada Lovelace')->backedBy(fn(\User $u): bool => $u->getFullName() === 'Ada Lovelace'));
 ```
+
+`tyhp build` emits those chains for an inline `fn`. The same file is emitted whether or not the `tyhp` module is loaded.
+
+A method parameter typed `Expression` or `PropertyPath` also accepts a closure in the emitted PHP: `\Tyhp\Expression|\Closure`, or `\Tyhp\PropertyPath|\Closure` for a property path. A nullable parameter keeps `|null`. The value body calls `\Tyhp\Expression::fromClosure` or `\Tyhp\PropertyPath::fromClosure` when the argument is a closure. A promoted constructor parameter, a by-reference or variadic parameter, a property-hook parameter, an inline closure's own parameter, a parameter typed as a union with a type other than `null`, and a parameter with `#[\Tyhp\PhpType]` keep the spelled type.
+
+A closure variable in Tyhp source is still **TYHP4323** (`Expression`) or **TYHP4320** (`PropertyPath`). PHP that calls the compiled method may pass a closure when that process has the `tyhp` module loaded at `0.1.0` or newer. A package, and any other PHP whose later process you do not control, should pass the fluent tree. That form is the recommended one for speed and stability whether or not the module is installed. See [tyhp/lambda for PHP](php_package_lambda.md).
 
 ## Captured Variables
 
@@ -590,7 +596,7 @@ The following expressions are supported inside `fn` expressions that target `Exp
 
 - Property access: `$x->prop`
 - Null-safe property access: `$x?->prop`
-- Method calls: `$x->method(...)`
+- Method calls: `$x->method(...)`, including an extension method (`$title->startsWith($prefix)` stays a method call; the extension body is not part of the tree)
 - Null-safe method calls: `$x?->method(...)`
 - Static method calls: `Class::method(...)`
 - Binary operators:

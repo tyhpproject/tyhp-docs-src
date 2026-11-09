@@ -106,9 +106,11 @@ Binary/unary/`empty` overloads emit as **static** methods. Convert-to emits as a
 
 | Pattern | Example / spelling |
 |---------|-------------------|
-| Generic variant / bag suffix | `__tyhpGeneric` |
+| Layout-2 method binder | declared name (`decode`), `layouts: [2]` |
+| Layout-1 callable and `#[\Tyhp\InferGeneric]` companion | `name__tyhpGeneric`, `layouts: [1]` |
+| Generic class factory (layout 1) | `new_<MangledFqn>__tyhpGeneric` |
 | Generic init hook | `__initGenerics__tyhpGeneric` |
-| Generic factory | `new_<MangledFqn>__tyhpGeneric` |
+| Generic bag | `$__tyhpGeneric` |
 | Polyfill get hook | `__get_<prop>__tyhpPropertyHook` |
 | Polyfill set hook | `__set_<prop>__tyhpPropertyHook` |
 | Polyfill init hook | `__initPropertyHooks__tyhpPropertyHook` |
@@ -134,7 +136,7 @@ Tyhp features that exist for type-checking often leave no (or a reduced) PHP foo
 
 | Feature | At runtime | See |
 |---------|------------|-----|
-| **Generics** | Type parameters erased from signatures. Tracked objects keep a `GenericObject` bag when needed. Foreign compiled-library sites use `\Tyhp\Generic::bind`. `#[\Tyhp\GenericRuntime]` is runtime-visible on emitted generics. `#[\Tyhp\EraseGeneric]` is compile-only. | [Generics](tyhp_0500_generics.md) |
+| **Generics** | Type parameters erased from signatures. A layout-2 method is `name(types)(args)` under the declared name. `#[\Tyhp\InferGeneric]` keeps the plain call and a `name__tyhpGeneric` companion (`layouts: [1]`). Erased callables stay plain methods, `layouts: [1]`. PHP calls `Box::new(T::int)(42)` and `Box::type(T::int)`. A Tyhp `new` of a foreign class uses `\Tyhp\Generic::bind`. `Generic::bind` binds layout 1 and layout 2 with `\Tyhp\TypeLike|string`. | [Generics](tyhp_0500_generics.md) |
 | **Type aliases** | Hints expand to the underlying PHP type. Source `.tyhp` aliases exist at runtime as namespace functions or class static methods returning `\Tyhp\Type` (`UserId()`, `Optional(\Tyhp\Type::int())`, `UserService::NameType()`), not as PHP types. Tyhpdef aliases stay type-only (`typeof` inlines the body) unless they stamp `aliasFactory`. | [Type Aliases](tyhp_0700_typeAliases.md) |
 | **Type guards / narrowing** | Compile-time only; `is` / guard checks lower to ordinary PHP boolean tests (`instanceof`, `\is_string($x)` when `#[\Tyhp\NativeTypeTest]` is on that guard, otherwise `\Tyhp\Type::is`). Object-shape aliases always use `\Tyhp\Type::is` with a `Type::objectShape(...)` descriptor (existence-only matching). | [Type Narrowing and Guards](tyhp_0200_typeNarrowingAndGuards.md) |
 | **`#[\Tyhp\NativeTypeTest]`** | Compile-only (`#[\Tyhp\NoEmit]`). Never appears in emitted PHP. Picks which type-guard function or concrete static method is the native `$x is T` lowering. | [Functions in Tyhpdef](tyhpdef_functions.md#native-type-tests-tyhpnativetypetest) |
@@ -177,7 +179,7 @@ Even when the emitter does not yet `RequirePackage` a package for every call sit
 | `\Tyhp\ObjectHelper` | Object-form `with` / clone-with lowering |
 | `\Tyhp\Contracts\IsDisposable` | Sync disposable protocol |
 | `\Tyhp\Concerns\HasGenerics` | Trait wiring the generic bag |
-| `\Tyhp\Generic` | `Generic::bind` for PHP and foreign compiled-library sites |
+| `\Tyhp\Generic` | `Generic::bind` for a class or callable chosen at runtime, and for explicit types on layout 1 and layout 2. Takes `\Tyhp\TypeLike|string` |
 | `\Tyhp\GenericRuntime` | Runtime-visible stamp on emitted generic declarations |
 | `\Tyhp\PropertyType` | Runtime-visible declared-type stamp on properties and promoted constructor parameters |
 | `\Tyhp\Concerns\UsesPropertyAccessors` / `HasPropertyAccessors` / `HandlesGet` / `HandlesSet` / `HandlesIsset` / `HandlesUnset` / `BootsTraits` | Property-accessor polyfill concerns |
@@ -254,6 +256,10 @@ Parameter types use the `\Tyhp\Type::parse()` format. A parameter whose type has
 
 `Expression` takes one type argument: the callable shape (`Expression<callable(User): string>`; `Expression<callable(): R>` for zero parameters). That shape is a checker/type-system convention; the emitted chain is the same for every shape.
 
+`tyhp build` emits those chains for an inline `fn`. The emitted file is the same whether or not the `tyhp` module is loaded.
+
+On a parameter typed `Expression` or `PropertyPath`, the emitted hint is `\Tyhp\Expression|\Closure` or `\Tyhp\PropertyPath|\Closure`. A nullable parameter keeps `|null`. The value body starts with a prologue that calls `fromClosure` when the argument is a `\Closure`, passing the parameter's callable shape. A promoted constructor parameter, a by-reference or variadic parameter, a property-hook parameter, an inline closure's own parameter, a parameter typed as a union with a type other than `null`, and a parameter with `#[\Tyhp\PhpType]` keep the spelled type and get no prologue. A closure variable in `.tyhp` is still TYHP4323 (`Expression`) or TYHP4320 (`PropertyPath`).
+
 `nameof(fn ($x) => $x->a->b)` is a compile-time fold to the last property segment (a string literal). It does not emit `PropertyPath` / `Expression` construction.
 
 `ExpressionSerializer::toJson` / `equals` and `Expression::equals` are **runtime library APIs** (not emitter call patterns). User code that calls them depends on `tyhp/lambda` the same way any other package type does.
@@ -284,9 +290,9 @@ Brief map from Tyhp construct → PHP runtime pattern. Goldens live under the co
 | Async / await | `\Tyhp\Promise::_async` / `_await` / `run`; return type `\Tyhp\Promise` | `tests/conformance/story11/async/`; [Async and Await](tyhp_2600_asyncAndAwait.md) |
 | `with` / clone-with | `\Tyhp\ObjectHelper::with(…)` (or native PHP 8.5 `clone(…)` when targeted) | `tests/conformance/story11/with/`; [with keyword](tyhp_2200_withKeyword.md) |
 | Operators | Static/`__to*` calls via `__add`, … | `tests/conformance/story11/operator-overloads/`; [Operator Overloads](tyhp_1600_operatorOverloads.md) |
-| Generics | Erasure + optional `GenericObject` bag / `__initGenerics__tyhpGeneric` / factories | `tests/conformance/story11/generics/`; [Generics](tyhp_0500_generics.md) |
+| Generics | Erasure. Layout 2 is the declared-name binder. Layout-1 companions are `name__tyhpGeneric`. Class factories and `__initGenerics__tyhpGeneric` stay the layout-1 class machinery | `tests/conformance/story11/generics/`; [Generics](tyhp_0500_generics.md) |
 | Property hooks (PHP &lt; 8.4) | Strip native hooks; `UsesPropertyAccessors` + `PropertyAccessor` registration; `__get_/__set_*__tyhpPropertyHook` | hook suites (native ≥ 8.4/8.5); polyfill paths in emitter |
-| Expression trees / PropertyPath | `\Tyhp\PropertyPath::on(…)->segment…->backedBy($fn)` (`nullSafe()` before `?->` hops); `\Tyhp\Expr::param(…)->…->backedBy($fn)` for `Expression` (nested `fn` → `Expr::closure`); `\Closure` sites → `$path->callable` | `tests/Tyhp.Tests/Emitter/PropertyPathEmitterTests.cs`, `ExpressionEmitterTests.cs`; [Parsable Lambdas](tyhp_3000_parsableLambdas.md) |
+| Expression trees / PropertyPath | `\Tyhp\PropertyPath::on(…)->segment…->backedBy($fn)` (`nullSafe()` before `?->` hops); `\Tyhp\Expr::param(…)->…->backedBy($fn)` for `Expression` (nested `fn` → `Expr::closure`); parameter hint `\Tyhp\Expression\|\Closure` or `\Tyhp\PropertyPath\|\Closure` with a `fromClosure` prologue; `\Closure` sites → `$path->callable` | `tests/Tyhp.Tests/Emitter/PropertyPathEmitterTests.cs`, `ExpressionEmitterTests.cs`; [Parsable Lambdas](tyhp_3000_parsableLambdas.md) |
 | PHP 8.5 surface / lower targets | Pipe, `(void)`, `clone(…)`, exit/die, attributes | `tests/conformance/story14_5/` |
 
 A thin index suite lives under `tests/conformance/story15/` (operators, extensions, generics erasure, structs, disposables, async, expression trees). Fuller emit coverage remains in `tests/conformance/story11/` and `tests/conformance/story14_5/` — see the conformance README.

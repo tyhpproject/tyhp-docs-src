@@ -8,6 +8,8 @@ status:
 
 Tyhp provides deterministic resource management through the `IsDisposable` and `AsyncIsDisposable` interfaces, the `:=` (using assignment) operator, and the `using` block. These features make sure resources such as database connections, file handles, and network sockets are cleaned up when you are finished with them.
 
+Disposal skips an uninitialized lazy object, so leaving the scope does not run its constructor. An object that has already been initialized still disposes. The check is `ReflectionClass::isUninitializedLazyObject`. It does not call `\Tyhp\Lazy::isLazy`. A `using` block on a project whose `output.phpVersion` is 8.4 or newer puts that call in the `finally` condition. On an older floor the call is wrapped in `\PHP_VERSION_ID >= 80400`, so that build still skips a ghost when it runs on PHP 8.4 or newer. A `:=` in a nested block, or in a function whose locals need `try`/`finally`, emits the same guard. A `:=` in other function bodies compiles to `DisposableScope`, which makes the same check internally, as does `DisposableHelper`. See [Lazy Objects](tyhp_0152_lazyObjects.md).
+
 ## The IsDisposable Interface
 
 Any class that manages a resource should implement `\Tyhp\Contracts\IsDisposable` (provided by the `tyhp/core` package). The interface requires a single `dispose()` method that performs cleanup.
@@ -174,7 +176,7 @@ function nested(bool $condition): void
             $inner = new DatabaseConnection('inner');
             echo "in block\n";
         } finally {
-            if ($inner instanceof \Tyhp\Contracts\IsDisposable) {
+            if ($inner instanceof \Tyhp\Contracts\IsDisposable && !(new \ReflectionClass($inner))->isUninitializedLazyObject($inner)) {
                 $inner->dispose();
             }
         }
@@ -220,7 +222,7 @@ function usingSingle(): void
     try {
         echo $db->query('SELECT 2'), "\n";
     } finally {
-        if ($db instanceof \Tyhp\Contracts\IsDisposable) {
+        if ($db instanceof \Tyhp\Contracts\IsDisposable && !(new \ReflectionClass($db))->isUninitializedLazyObject($db)) {
             $db->dispose();
         }
     }
@@ -259,7 +261,7 @@ function usingMultiple(): void
         echo "working\n";
     } finally {
         $__disposeErrors = [];
-        if ($cache instanceof \Tyhp\Contracts\IsDisposable) {
+        if ($cache instanceof \Tyhp\Contracts\IsDisposable && !(new \ReflectionClass($cache))->isUninitializedLazyObject($cache)) {
             try {
                 $cache->dispose();
             }
@@ -267,7 +269,7 @@ function usingMultiple(): void
                 $__disposeErrors[] = $__e;
             }
         }
-        if ($db instanceof \Tyhp\Contracts\IsDisposable) {
+        if ($db instanceof \Tyhp\Contracts\IsDisposable && !(new \ReflectionClass($db))->isUninitializedLazyObject($db)) {
             try {
                 $db->dispose();
             }
@@ -336,10 +338,10 @@ function usingAwait(): \Tyhp\Promise
             $data = \Tyhp\Promise::_await($conn->fetch('/api/data'));
             echo $data, "\n";
         } finally {
-            if ($conn instanceof \Tyhp\Contracts\AsyncIsDisposable) {
+            if ($conn instanceof \Tyhp\Contracts\AsyncIsDisposable && !(new \ReflectionClass($conn))->isUninitializedLazyObject($conn)) {
                 \Tyhp\Promise::_await($conn->disposeAsync());
             }
-            elseif ($conn instanceof \Tyhp\Contracts\IsDisposable) {
+            elseif ($conn instanceof \Tyhp\Contracts\IsDisposable && !(new \ReflectionClass($conn))->isUninitializedLazyObject($conn)) {
                 $conn->dispose();
             }
         }

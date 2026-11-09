@@ -20,7 +20,7 @@ For the Tyhp-side `extension { }` syntax, `use extension` in `.tyhp` files, gene
 
 ## Standalone `extension Name { }`
 
-A standalone extension in a `.tyhpdef` file is a compile-time mapping from Tyhp method or operator syntax to a PHP expression. Without `#[\Tyhp\GenericRuntime]`, the compiler replaces every call site with the member's `=>` expression. A compiled Tyhp library stamps `GenericRuntime` on emitted generic mappings (`binder` only when the companion exists). Foreign consumer sites use `\Tyhp\Generic::bind` instead of splicing a wrapper that drops the type argument.
+A standalone extension in a `.tyhpdef` file is a compile-time mapping from Tyhp method or operator syntax to a PHP expression. Without `#[\Tyhp\GenericRuntime]`, the compiler replaces every call site with the member's `=>` expression. A compiled Tyhp library stamps `GenericRuntime` on emitted generic mappings. A layout-2 `binder` is the declared name. An `#[\Tyhp\InferGeneric]` mapping's `binder` is the `name__tyhpGeneric` companion (`layouts: [1]`). A foreign layout-2 call emits `name(types)(args)` instead of splicing a wrapper that drops the type argument.
 
 When the extension is active and the member has no `#[\Tyhp\GenericRuntime(binder: …)]`, the compiler replaces every call site with the member's `=>` expression and substitutes the receiver and arguments into that expression. For example:
 

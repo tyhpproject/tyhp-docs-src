@@ -244,3 +244,4 @@ If the compiler starts but immediately reports that a .NET runtime is missing, t
 - [Composer Runtime Packages](project_composerPackages.md): runtime package versions and `extra.tyhp.require`.
 - [CLI: Tyhpdef Generation](cli_tyhpdefGeneration.md): what the `generate_tyhpdef --vendor` hook does.
 - [The tyhp/core Package](package_core.md): the runtime library and its Composer plugin.
+- [tyhp/compiler for PHP](php_package_compiler.md) — calling this package from PHP

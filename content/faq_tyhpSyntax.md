@@ -8,7 +8,7 @@ Not explicitly. Tyhp supports type inference on first assignment. When you write
 
 ## What happens to types at runtime?
 
-Tyhp's type system is enforced at compile time. Types, generics, and type guards are erased from PHP signatures. The compiled PHP output contains the type hints that PHP itself supports (parameter types, return types, property types). Source type aliases expand to the underlying type in those hints and also emit a `\Tyhp\Type` factory (`UserId()`, `Optional(\Tyhp\Type::int())`) so PHP can name the alias at runtime. A compiled Tyhp library's `package.tyhpdef` stamps `#[\Tyhp\GenericRuntime]` on every emitted generic class, method, and function. Foreign consumer sites use `\Tyhp\Generic::bind`; overlay tyhpdefs that omit the stamp keep erase / inline emit. See [Type Aliases](tyhp_0700_typeAliases.md) and [CLI: Tyhpdef Generation](cli_tyhpdefGeneration.md).
+Tyhp's type system is enforced at compile time. Types, generics, and type guards are erased from PHP signatures. The compiled PHP output contains the type hints that PHP itself supports (parameter types, return types, property types). Source type aliases expand to the underlying type in those hints and also emit a `\Tyhp\Type` factory (`UserId()`, `Optional(\Tyhp\Type::int())`) so PHP can name the alias at runtime. A compiled Tyhp library's `package.tyhpdef` stamps `#[\Tyhp\GenericRuntime]` on every emitted generic class, method, and function. A foreign layout-2 call emits `name(types)(args)`. A foreign class `new` emits `\Tyhp\Generic::bind`. Overlay tyhpdefs that omit the stamp keep erase / inline emit. See [Type Aliases](tyhp_0700_typeAliases.md) and [CLI: Tyhpdef Generation](cli_tyhpdefGeneration.md).
 
 ## Can I mix Tyhp and PHP files in the same project?
 
@@ -16,7 +16,7 @@ Yes. A Tyhp project can contain both `.tyhp` files (type-checked and compiled) a
 
 ## How do generics work without runtime support?
 
-Generics are enforced at compile time. Type parameters are erased from PHP signatures. Same-compilation tracked sites emit factories / `__tyhpGeneric` binders; erased sites stay a plain `new` or plain call. Foreign compiled-library tyhpdefs that stamp `#[\Tyhp\GenericRuntime]` always go through `\Tyhp\Generic::bind(...)(...)`. Overlay tyhpdefs without the stamp keep erase / inline emit. Alias factories (`aliasFactory`) are unchanged.
+Generics are enforced at compile time. Type parameters are erased from PHP signatures. A non-erased method that is not `#[\Tyhp\InferGeneric]` emits `name(types)(args)` under the declared name (`layouts: [2]`). `#[\Tyhp\InferGeneric]` keeps the plain call and a `name__tyhpGeneric` companion (`layouts: [1]`). Erased sites stay a plain `new` or a plain call, `layouts: [1]`. A Tyhp `new` of a foreign class emits `\Tyhp\Generic::bind`. PHP calls `Box::new(T::int)(42)` and `Box::type(T::int)`. Overlay tyhpdefs without the stamp keep erase / inline emit. Alias factories (`aliasFactory`) are unchanged.
 
 ```tyhp
 <?tyhp

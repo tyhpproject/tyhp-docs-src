@@ -212,11 +212,12 @@ If the root promise can never settle — for example, it awaits a [`Deferred`](#
 |---|---|---|
 | Top-level `await` in an application entry file | — | Scripts and CLI commands written in Tyhp |
 | `EventLoop::getInstance()->run($promise, $token)` | `T` (typed) | A synchronous Tyhp function needs the value of a promise. The optional token ends the run when cancelled (see [cancellation](#eventloop-run)) |
-| `$promise->wait($timeoutMs)` | `mixed` | You need an upper bound on how long to block, or you are calling from PHP |
-| `EventLoop::getInstance()->runUntilSettled($promise, $timeoutMs)` | `mixed` | Same as `wait()`; convenient in tests |
-| `Promise::run($fn, $token)` | settled `T` (typed) | Run a plain or `async` closure inside the loop and get its value; convenient from PHP. Takes the same optional token |
+| `\Tyhp\await($promise, $timeoutMs, $token)` | settled value | PHP. Inside a loop fiber it suspends. From synchronous PHP it runs the loop until the promise has settled and no immediate work is left. `$promise->wait($timeoutMs, $token)` is the same call |
+| `$promise->wait($timeoutMs, $token)` | settled value | Same as `\Tyhp\await`. Null or a negative `$timeoutMs`, including `-1`, waits with no deadline |
+| `EventLoop::getInstance()->runUntilSettled($promise, $timeoutMs)` | `mixed` | Stops when the promise settles and leaves remaining work queued. Convenient in tests |
+| `Promise::run($fn, $token)` | settled `T` (typed) | Run a plain or `async` closure inside the loop and get its value. `#[\Tyhp\InferGeneric]`, so PHP calls it as `Promise::run($fn)`. Takes the same optional token |
 
-`EventLoop::run()` keeps running immediately runnable work after the promise settles and stops once the queues are empty. `wait()` and `runUntilSettled()` stop as soon as the promise settles and leave any remaining work queued. Only `run()` (and `Promise::run()`, which uses it) accepts a cancellation token.
+`EventLoop::run()` keeps running immediately runnable work after the promise settles and stops once the queues are empty. `\Tyhp\await` and `$promise->wait()` do the same wait: the promise has settled and no immediate work is left. `runUntilSettled()` stops as soon as the promise settles and leaves any remaining work queued. `run()`, `await`, and `wait()` accept a cancellation token. `Promise::run()` accepts one and uses `run()`.
 
 :::warning
 None of these entry points may be called while the loop is already running — that is, from inside async code or from a timer, microtask, or stream callback. Doing so throws `\LogicException` ("called re-entrantly"). Inside async code, use `await` instead.
@@ -233,14 +234,15 @@ declare(strict_types=1);
 
 require __DIR__ . '/vendor/autoload.php';
 
-use Tyhp\EventLoop;
+use function Tyhp\async;
+use function Tyhp\await;
 
-// Blocks until the promise settles, then returns its value or throws its rejection.
-$total = EventLoop::getInstance()->run(\App\totalFor(['A-1', 'B-22']));
-
-// Same, but gives up after two seconds with \Tyhp\Exceptions\TimeoutException.
-$total = \App\totalFor(['A-1', 'B-22'])->wait(2000);
+$value = await(async(fn (): int => 42));
+$value = $promise->wait();
+$value = await($promise, 2000);
 ```
+
+`async` and `await` are `#[\Tyhp\InferGeneric]`, so PHP calls them plainly and the type parameter is inferred. A call to `async` with explicit type arguments uses the `async__tyhpGeneric` companion (`layouts: [1]`). `await` needs no runtime type, so it is a plain function with no companion.
 
 ## The Promise Class
 
@@ -263,7 +265,7 @@ Methods in this class that produce a promise from a type parameter, such as `res
 
 ### Creating promises
 
-You rarely construct promises directly: async functions, async closures, and `async { ... }` blocks create them for you (see [Async Blocks](tyhp_2600_asyncAndAwait.md#async-blocks) for returning a running promise from a method). Use the factories below for already-settled values and [`Deferred`](#deferred) for promises that an outside event settles. Pass the type argument explicitly to `resolve`, `resolved`, `reject`, and `rejected`, as in `Promise::resolved<int>(1)`; without it the result is not assignable to a `Promise<int>` variable.
+You rarely construct promises directly: async functions, async closures, and `async { ... }` blocks create them for you (see [Async Blocks](tyhp_2600_asyncAndAwait.md#async-blocks) for returning a running promise from a method). Use the factories below for already-settled values and [`Deferred`](#deferred) for promises that an outside event settles. In Tyhp, pass the type argument explicitly when inference cannot see it, as in `Promise::resolved<int>(1)`. From PHP, `resolve`, `resolved`, `then`, `all`, `race`, `any`, `timeout`, `whenAll`, `whenAny`, and `run` are `#[\Tyhp\InferGeneric]` and stay plain calls. `reject`, `rejected`, `withResolvers`, `allSettled`, and `batch` are binders: `Promise::reject()($e)`, `Promise::withResolvers(T::int)()`, `Promise::allSettled()($promises)`.
 
 :::member[public function __construct(callable(): TReturn $executor, bool $immediateResolve = false)]
 Creates a promise that runs `$executor` in its own fiber. The fiber is queued on the event loop and starts on the next queue drain, not inside the constructor. The promise fulfills with the executor's return value or rejects with the exception it throws.
@@ -300,7 +302,7 @@ Returns an already-rejected promise with `$error` as its rejection reason, witho
 :::member[public static function withResolvers<T extends void|mixed>(): Deferred<__Awaited<T>>]
 Returns a new [`Deferred<T>`](#deferred): a pending promise (`getPromise()`) together with the `resolve()` and `reject()` methods that settle it. Equivalent to `new Deferred<T>()` in Tyhp code.
 
-Plain PHP code cannot pass type arguments, so it should call `Promise::withResolvers()` to get a deferred promise that can be resolved with a value. A bare `new Deferred()` is a `Deferred<void>`, which can only be resolved without a value.
+`T` is only in the result, so PHP calls the binder: `Promise::withResolvers(T::int)()`. `Promise::reject()($e)` and `Promise::rejected()($e)` are the same shape.
 :::
 
 ```tyhp
@@ -387,10 +389,10 @@ async function describeLookup(string $sku): string {
 
 ### Inspecting and blocking
 
-:::member[public function wait(int $timeoutMs = -1): mixed]
-Runs the event loop until this promise settles, then returns its value or throws its rejection reason. Use it only from synchronous code. When `$timeoutMs` is greater than zero and the promise is still pending after that many milliseconds, throws `TimeoutException` and leaves the promise pending; zero or a negative value waits without a limit.
+:::member[public function wait(?int $timeoutMs = null, ?CancellationToken $token = null): mixed]
+The same wait as `\Tyhp\await($this, $timeoutMs, $token)`. Inside a loop fiber this suspends. From synchronous PHP it runs the event loop until this promise has settled and no immediate work is left. Null or a negative `$timeoutMs`, including `-1`, waits with no deadline. A timeout of zero or more waits through `Promise::timeout`.
 
-Throws `\LogicException` if the loop is already running. Equivalent to `EventLoop::getInstance()->runUntilSettled($this, $timeoutMs)`.
+Throws the same re-entrancy `\LogicException` as `EventLoop::run` when the loop is already running and this call is not inside a loop fiber.
 :::
 
 :::member[public function getResult(): TReturn]
@@ -964,7 +966,7 @@ What the shutdown rejects and what it leaves alone:
 :::
 
 :::member[public function runUntilSettled(Promise $promise, int $timeoutMs = -1): mixed]
-Runs the loop until `$promise` settles, then immediately returns its value or throws its rejection reason, leaving any other queued work in place. When `$timeoutMs` is greater than zero, throws `TimeoutException` if the promise is still pending after that many milliseconds; otherwise waits without a limit. Throws `\LogicException` when the loop is already running. `Promise::wait()` calls this method.
+Runs the loop until `$promise` settles, then immediately returns its value or throws its rejection reason, leaving any other queued work in place. When `$timeoutMs` is greater than zero, throws `TimeoutException` if the promise is still pending after that many milliseconds; otherwise waits without a limit. Throws `\LogicException` when the loop is already running.
 :::
 
 :::member[public function tick(): bool]
@@ -1604,7 +1606,7 @@ async function resizeAll(array<string> $paths, CancellationToken $token): array<
 :::
 
 :::warning
-**Never enter the loop from inside the loop.** `EventLoop::run()`, `runUntilSettled()`, `Promise::wait()`, and `Promise::run()` throw `\LogicException` when called from async code or from a loop callback. Use `await`.
+**Never enter the loop from inside the loop.** `EventLoop::run()`, `runUntilSettled()`, and `Promise::run()` throw `\LogicException` when called from async code or from a loop callback. Use `await`. `Promise::wait()` and `\Tyhp\await()` suspend inside async code, and throw the same `\LogicException` from a loop callback that is not running in a fiber.
 :::
 
 :::warning
@@ -1636,3 +1638,4 @@ async function resizeAll(array<string> $paths, CancellationToken $token): array<
 - [The tyhp/core Package](package_core.md) — `IsDisposable`, `AggregateException`, and the runtime type system.
 - [Runtime Packages Overview](package_intro.md) — all runtime packages at a glance.
 - [Composer Runtime Packages](project_composerPackages.md) — installing and pinning `tyhp/*` packages.
+- [tyhp/async for PHP](php_package_async.md) — calling this package from PHP

@@ -9,7 +9,14 @@ status:
 Tyhp adds generic type parameters to classes, interfaces, traits, enums, structs, functions, and methods. Generics provide compile-time type safety for reusable components. Type parameters are erased from PHP signatures. Tyhp generics support constraints via extends, default type parameters, and generic import aliases.
 
 :::note
-Generic type parameters, arguments, and constraints are erased from PHP signatures. Same-compilation sites that still need the bound type at runtime (`typeof`, generic-typed properties, …) emit Mechanism C factories / Mechanism D binders; everything else is a plain class or function. Every emitted generic class, method, and function still carries `#[\Tyhp\GenericRuntime]` (`erased` + `layouts: [1]`). Foreign compiled-library sites always go through `\Tyhp\Generic::bind`. PHP builtin and overlay tyhpdefs that omit the stamp keep erase / inline emit. `#[\Tyhp\EraseGeneric]` opts a property (or a whole class of properties) out of Mechanism C set checks.
+Generic type parameters, arguments, and constraints are erased from PHP signatures. A declaration that still needs those arguments at runtime is stamped `#[\Tyhp\GenericRuntime]`.
+
+- An erased generic stays a plain method or a plain `new`, stamped `erased: true, layouts: [1]`.
+- A non-erased method or function that is not `#[\Tyhp\InferGeneric]` is a binder under its declared name: `Json::decode($T)($json)`, stamped `layouts: [2]`. The binder is that name.
+- `#[\Tyhp\InferGeneric]` keeps the value signature under the declared name and adds a `name__tyhpGeneric` companion stamped `layouts: [1]`. A call with explicit type arguments uses the companion. `\Tyhp\Generic::bind` binds layout 1 and layout 2 and takes `\Tyhp\TypeLike|string`.
+- A generic class is stamped `layouts: [1]`. PHP calls `Box::new(T::int)(42)` and `Box::type(T::int)`. `new()` uses the constructor's visibility and is not `final`. A private constructor emits `private static function new`. Abstract classes get `type()` only. Interfaces and traits get neither.
+
+PHP builtin and overlay tyhpdefs that omit the stamp stay erased. `#[\Tyhp\EraseGeneric]` opts a property, or every generic-typed property of a class, out of set checks.
 :::
 
 ## Generic Classes
@@ -43,33 +50,37 @@ Generic type parameters are erased from PHP signatures. Unconstrained type param
 
 A generic-typed **property** (including a promoted constructor property) opts the class into runtime tracking (Mechanism C: `HasGenerics`, factory, set checks) unless the property or class carries `#[\Tyhp\EraseGeneric]`. Runtime-use constructs (`typeof(T)`, `default(T)`, `is T`, `new T()`, forwarded type arguments) also force tracking. Mixed mode is allowed: the class stays tracked while opted-out properties skip set checks.
 
+A tracked class is stamped `layouts: [1]` and keeps a generated factory. Same-compilation `new Box<int>(42)` calls that factory. The factory name is the class stamp's `factory` value; it is the layout-1 class factory, not the PHP call. PHP constructs and describes the class with `new()` and `type()`:
+
 ```php
 <?php
-// PHP output — signatures erase; this Box is tracked because it stores T
-declare(strict_types=1);
 
-/**
- * @template T
- */
-#[\Tyhp\GenericRuntime(erased: false, factory: "new_Box__tyhpGeneric", layouts: [1])]
-class Box {
-    use \Tyhp\Concerns\HasGenerics;
-    // …
-}
+use Tyhp\Type as T;
 
-$intBox = \Box::new_Box__tyhpGeneric(\Tyhp\Type::int(), 42);
+$intBox = \Vendor\Box::new(T::int)(42);
+$boxType = \Vendor\Box::type(T::int);
 ```
 
-From **another compilation** (a vendor `package.tyhpdef` that stamps `GenericRuntime`), Tyhp emits `\Tyhp\Generic::bind` instead of baking the factory name:
+`new()` returns a closure with the constructor's value signature. Its visibility matches the constructor: a private constructor emits `private static function new` without `final`. `type()` is public and returns `\Tyhp\Type`. A non-generic `IntBox extends Box<int>` inherits `Box::new`, and that closure builds an `IntBox`. A method named `new` or `type` on a generic class, or on an ancestor, is TYHP4406.
+
+A Tyhp `new \Vendor\Box<int>(42)` of a class compiled in another library emits `\Tyhp\Generic::bind(\Vendor\Box::class, \Tyhp\Type::int())(42)`. `lazy new` of that class emits the same eager call. Defer it with `->ghost(42)`. See [Lazy Objects](tyhp_0152_lazyObjects.md). When the class name is chosen at runtime, PHP uses the same binder: `\Tyhp\Generic::bind($className, T::int)->new(42)`.
+
+A non-erased method that is not `#[\Tyhp\InferGeneric]` is called types-first, under the declared name:
 
 ```php
-$intBox = \Tyhp\Generic::bind(\Vendor\Box::class, \Tyhp\Type::int())(42);
-$result = \Tyhp\Generic::bind($h->identity(...), \Tyhp\Type::string())($value);
+$user = \Tyhp\Json::decode(T::struct([
+    'id' => T::int,
+    'name' => T::string,
+]))($json);
 ```
+
+`#[\Tyhp\InferGeneric]` is a plain call. Explicit type arguments use the `name__tyhpGeneric` companion (`layouts: [1]`). `\Tyhp\Generic::bind` on that callable binds the companion the same way, and it also binds a layout-2 method. An erased method, with or without the attribute, stays a plain call with no companion, `layouts: [1]`.
 
 A first-class callable of a generic function (`identity(...)` or `identity<string>(...)`) keeps its type-binding identity, also when it needs [implicit conversions](tyhp_1600_operatorOverloads.md#conversions-on-first-class-callables) for a parameter. The compiler wraps it with `\Tyhp\Generic::wrapCallable`, and `\Tyhp\Generic::bind` on that value binds the type arguments while the conversions still apply.
 
-PHP builtin and overlay generics that omit the stamp stay erased / inlined. Same-compilation erased classes (no remaining runtime use and no remaining generic-typed properties) emit a plain `new` / plain call, still stamped `erased: true`.
+PHP builtin and overlay generics that omit the stamp stay erased. Same-compilation erased classes emit a plain `new` or a plain call, still stamped `erased: true, layouts: [1]`.
+
+A magic method cannot declare type parameters (TYHP4404). A generic method cannot override or implement a non-generic method (TYHP4405). `\Tyhp\Contracts\ArrayAccessShape::offsetGet` and `offsetSet` are not generic. `#[\Tyhp\InferGeneric]` on a type parameter no argument can supply is TYHP4407. A by-reference parameter such as `T &$out` is not a source, so `Json::tryDecode` is binder-first. The attribute on a declaration with no type parameters is warning TYHP4408.
 
 `#[\Tyhp\EraseGeneric]` is compile-only (`#[\Tyhp\NoEmit]`). It is legal on a class, a property, or a promoted constructor parameter. On a method or function it is an error. The attribute is not inherited; a tracked child of an erased generic parent does not call `parent::__initGenerics__`.
 
@@ -583,7 +594,7 @@ Use meaningful generic parameter names: T for a single general type, TKey/TValue
 ## Common Mistakes
 
 :::danger
-Don't treat erased type parameters as a PHP runtime API — they are stripped from signatures. From hand-written PHP and from Tyhp that consumes a **foreign** compiled library, construct or call generics with `\Tyhp\Generic::bind`. Same-compilation Tyhp still emits the factory or binder directly when the class or callable is tracked.
+Don't treat erased type parameters as a PHP runtime API — they are stripped from signatures. PHP calls a concrete generic class with `Box::new(T::int)(42)` and `Box::type(T::int)`, a layout-2 method with `name(types)(args)`, and an `#[\Tyhp\InferGeneric]` method as a plain call. `\Tyhp\Generic::bind` is for a class or callable chosen at runtime, and it also binds layout 1 and layout 2 when the type arguments are supplied from PHP. Same-compilation Tyhp `new` still calls the class factory; a layout-2 Tyhp call emits `name(types)(args)`.
 :::
 
 :::danger

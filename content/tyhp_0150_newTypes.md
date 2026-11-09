@@ -703,7 +703,7 @@ A `string` representing a function name in scope. Obtained via `\function_exists
 :::
 
 :::member[__ClassName]
-A `string` representing a class name in scope. Obtained via `\class_exists()` as a type guard.
+A `string` representing a class name in scope. Obtained via `\class_exists()` as a type guard, or from `User::class` / `T::class` (`__ClassName<User>` / `__ClassName<T>`).
 Bare `__ClassName` is equivalent to `__ClassName<object>`; `\class_exists<T>($n)` narrows to `__ClassName<T>`.
 Parametric `__ClassName<T>` is invariant in `T` when `T` is a nominal class (exact class name). When `T` is an object-shape alias, `__ClassName<Shape>` is a string naming some class whose instances match `Shape` (not an exact-name brand). `__ClassName<__New<Shape>>` names a concrete, public-`new`-able class matching that shape; `new $cls(...)` is allowed with the shape’s constructor arguments. See [Object Shapes and `__New<T>`](tyhp_3400_newTypeConstraint.md).
 For "name of `T` or a descendant", use `__CompatibleTypeName<T>`. For "name of `T` or a parent", use `__SuperTypeName<T>`.
@@ -750,7 +750,7 @@ The lexical enclosing class or enum at the use site. Inside an instance method a
 :::
 
 :::member[__PropertyName<T>]
-A `string` representing a property name on the type `T`. Obtained via `\property_exists()` as a type guard.
+A `string` representing a property name on the type `T`. Obtained via `\property_exists()` as a type guard, from `nameof(T::$prop)`, or from a string literal that names a property of `T`. An attribute constructor parameter of this type accepts that `nameof` (it is a constant) and rejects a name that is not a property of `T`.
 :::
 
 :::member[__MethodName<T>]

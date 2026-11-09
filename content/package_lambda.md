@@ -10,6 +10,14 @@ This page is the API reference and usage guide for the package. It covers every 
 
 `tyhp build` adds `tyhp/lambda` to your `composer.json` when your compiled code uses `Expression` or `PropertyPath`, so you rarely add it by hand. The package depends on `tyhp/core`. Version pins follow the same `80N.X.Y` scheme as the other compiled `tyhp/*` packages; [Composer Runtime Packages](project_composerPackages.md) explains which pin to use, and [Runtime Packages Overview](package_intro.md) shows how the packages relate.
 
+`ext-tyhp` is not required. The package suggests it, and no Tyhp package requires it. Installing it is recommended. It improves the performance and stability of Tyhp runtime code. The loaded module name is `tyhp`. Install it with PIE, not `composer require`:
+
+```bash
+pie install tyhp/ext-tyhp
+```
+
+The runtime checks `extension_loaded('tyhp')` once per process, then `phpversion('tyhp') >= 0.1.0`. A missing or older module is ignored. There is no warning. Trees built by `tyhp build`, and trees you build with the fluent API, behave as specified either way.
+
 The package uses three namespaces:
 
 | Namespace | Contents |
@@ -48,11 +56,12 @@ Tyhp\Expression\ExpressionNode             abstract base: $type, $nodeType, acce
 └── LambdaExpression                       fn ($p) => $p->rating > 3, nested in a body
 ```
 
-Trees reach your code in one of four ways:
+Trees reach your code in one of five ways:
 
-- **From the compiler, as an `Expression`.** An inline `fn` passed to an `Expression<callable(...): R>` parameter becomes a full tree of nodes.
-- **From the compiler, as a `PropertyPath`.** An inline `fn` that is only a property chain (`fn ($u) => $u->address->city`), passed to a `PropertyPath<callable(T): R>` parameter, becomes a `PropertyPath` with the chain as an array of names.
-- **From the fluent builders.** Plain PHP code cannot write parsable lambdas, so `Expression::of(User::class)->age->gte(18)` builds an equivalent tree by method calls. This is how PHP callers use a Tyhp library that expects expression trees.
+- **From the compiler, as an `Expression`.** An inline `fn` passed to an `Expression<callable(...): R>` parameter becomes a full tree of nodes. `tyhp build` emits that tree as a fluent `\Tyhp\Expr::param(...)->…->backedBy(fn)` chain, the same whether or not the `tyhp` module is loaded.
+- **From the compiler, as a `PropertyPath`.** An inline `fn` that is only a property chain (`fn ($u) => $u->address->city`), passed to a `PropertyPath<callable(T): R>` parameter, becomes a `PropertyPath` with the chain as an array of names. The emit is `\Tyhp\PropertyPath::on(...)->…->backedBy(fn)`.
+- **From the fluent builders.** `Expression::of(User::class)->age->gte(18)`, `_expr`, and `_path` build the same kind of tree by method calls. This is the form PHP callers should ship: a package cannot know whether a later process has the `tyhp` module loaded, or which version is loaded. It is the recommended form for speed and stability whether or not the module is installed.
+- **From a closure.** `Expression::fromClosure` and `PropertyPath::fromClosure` build a tree from a `\Closure`. A PHP caller who knows that process has `tyhp` at `0.1.0` or newer may pass the closure. That is the easier spelling in that case. The module walks the closure when the check above passes. Otherwise the closure's source is tokenized. A body the reader cannot read throws `\InvalidArgumentException` on both paths.
 - **By constructing nodes yourself.** Every node class and `Expression` have public constructors. This is useful in tests and when you rebuild a tree.
 
 The examples on this page use these two classes:
@@ -183,6 +192,14 @@ $isAdult = new Expression(
 The constructor does not check that the tree and the closure describe the same logic. Keep them consistent yourself.
 :::
 
+:::member[public static function fromClosure(\Closure $fn, mixed $expectedShape): \Tyhp\Expression<callable>]
+Builds a tree from a closure. Parameter types declared on the closure are kept. `$expectedShape` supplies a parameter or return type the closure leaves out, spelled `callable(User): bool`.
+
+When the `tyhp` module is loaded and at least `0.1.0`, the tree is read from the closure. Otherwise the closure's source is tokenized. A closure the reader cannot read throws `\InvalidArgumentException` on both paths. A return type PHP checks, such as `: bool`, makes a closure unreadable, and so does a `use` clause. Write an arrow function, or a `function` whose body is one `return`, with no declared return type.
+
+`Expression::lambda` is a different call. Its closure is the executable half of a tree you already built.
+:::
+
 :::member[public function __invoke(__CallableParametersRest<TCallableShape> ...$args): __CallableReturnType<TCallableShape>]
 Runs the stored closure with `$args`, so an `Expression` can be called like a function: `$predicate($user)`. The result is stored in `$lastResult` and returned.
 
@@ -277,7 +294,7 @@ Same as `andAll()`, but combines with `||`.
 
 `Tyhp\PropertyPath` is an `Expression` that is only a chain of property reads. Use it for APIs that need a property *reference* rather than a predicate: ORM column mappings, `orderBy`, `select`, form field bindings, validation messages. Because the chain is written as code, renaming the property in your IDE updates every reference, and a typo is a compile error.
 
-When an `fn` is passed to a `PropertyPath<callable(T): R>` parameter, the compiler emits a `new \Tyhp\PropertyPath(...)` with the source class, the result type, the array of property names, and your `fn` as the closure. Chains that use `?->` also pass a `nullSafeFlags` array. The compiled output is shown on the [language page](tyhp_3000_parsableLambdas.md#propertypath-compiled-php-output).
+When an `fn` is passed to a `PropertyPath<callable(T): R>` parameter, the compiler emits a `\Tyhp\PropertyPath::on(...)` chain ended by `backedBy` with your `fn`. Chains that use `?->` call `nullSafe()` before that segment. The compiled output is shown on the [language page](tyhp_3000_parsableLambdas.md#propertypath-compiled-php-output).
 
 The tree in `$body` is built from the chain, not from your `fn`. Its parameter is always named `source`, with `paramType` set to the source class, and every property node has the type `'mixed'`:
 
@@ -319,6 +336,12 @@ $city = new PropertyPath(
 ```
 :::
 
+:::member[public static function fromClosure(\Closure $fn, mixed $expectedShape): \Tyhp\PropertyPath<callable>]
+Builds a property path from a closure whose body is a chain of property fetches. `$expectedShape` supplies a source or result type the closure leaves out, spelled `callable(User): string`. The closure needs a single parameter. A body that is not a property chain throws `\InvalidArgumentException`.
+
+The module path and the source path are the same as [`Expression::fromClosure`](#expression). `PropertyPath::from` is a different call: its closure is the executable half of a path you already built.
+:::
+
 :::member[public function getPropertyName(): string]
 Returns the last segment: `'city'` for `$u->address->city`. Returns `''` for an empty path. This matches what `nameof(fn (User $u) => $u->address->city)` gives at compile time.
 :::
@@ -349,23 +372,22 @@ readColumn($user, fn ($u) => $u->address->city);   // 'Oslo'
 
 ## Fluent builders for PHP callers
 
-A Tyhp library can expose methods that take `Expression<callable(T): bool>` or `PropertyPath<callable(T): R>`. Tyhp callers pass an `fn`. PHP callers cannot, because the PHP compiler does not capture lambda bodies. The fluent builders fill that gap: they build the same kind of tree from method calls, starting at `Expression::of()`.
+A Tyhp library can expose methods that take `Expression<callable(T): bool>` or `PropertyPath<callable(T): R>`. Tyhp callers pass an `fn`. PHP callers build the same tree with these fluent methods. Use them in a package and in any PHP that may run without the `tyhp` module. They are the recommended form for speed and stability either way. A caller who knows that process has `tyhp` at `0.1.0` or newer may pass a closure instead; see [`fromClosure`](#expression). `Expression::of` and `PropertyPath::on` are `#[\Tyhp\InferGeneric]`: a plain call infers `T` from the class-string, and explicit type arguments use the `of__tyhpGeneric` and `on__tyhpGeneric` companions (`layouts: [1]`). `_expr` and `_path` are fallback functions in `tyhp/lambda` with the same attribute. Each forwards `<T>` to `Expression::of` or `PropertyPath::on` and has its own companion, `_expr__tyhpGeneric` and `_path__tyhpGeneric`. A global function of that name is left in place. `Expression::lambda`, `PropertyPath::from`, and `backedBy` stay binders: `name(types)(args)`.
 
 ```php
 <?php
 
 use App\User;
-use Tyhp\Expression;
 
-// PropertyPath: a property reference
-$sortColumn = Expression::of(User::class)->address->city;
-
-// Expression: a predicate
-$isEligible = Expression::of(User::class)->age->gte(18)
+$sortColumn = \_expr(User::class)->address->city;
+$isEligible = \_expr(User::class)->age->gte(18)
     ->and()->isActive->same(true);
+$path = \_path(User::class)->address->city;
 
 $repository->orderBy($sortColumn)->where($isEligible);
 ```
+
+`Expression::of(User::class)` and `PropertyPath::on(User::class)` are the same plain calls.
 
 ### Builder lifecycle
 
@@ -1362,3 +1384,4 @@ Declared in `Tyhp\Expression\Structs`. It pairs the `source` parameter of a prop
 - [The tyhp/core Package](package_core.md) — the runtime support package that `tyhp/lambda` depends on.
 - [Generics](tyhp_0500_generics.md) — generic classes such as `Query<T>` and the `T extends object` bound used by the builders.
 - [Structs](tyhp_0400_structs.md) — the struct types used for serialized nodes.
+- [tyhp/lambda for PHP](php_package_lambda.md) — calling this package from PHP

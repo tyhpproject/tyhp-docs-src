@@ -139,7 +139,7 @@ function isNonEmpty(mixed $v): $v is array {
 
 ## Generics
 
-Type parameters on classes, interfaces, traits, enums, functions, and methods. Fully erased at compile time. Supports `extends` constraints and default type parameters.
+Type parameters on classes, interfaces, traits, enums, functions, and methods. Erased from PHP signatures. A layout-2 method is `name(types)(args)`. `#[\Tyhp\InferGeneric]` stays a plain call, with a `name__tyhpGeneric` companion for explicit type arguments. PHP calls `Box::new(T::int)(42)` and `Box::type(T::int)`. Supports `extends` constraints and default type parameters. Magic methods cannot declare type parameters (TYHP4404). A generic method cannot override a non-generic method (TYHP4405). A method named `new` or `type` on a generic class is TYHP4406.
 
 <a href="tyhp_0500_generics.html">See full documentation →</a>
 
@@ -430,9 +430,27 @@ function update(?Config $config, ?User $user): void {
 }
 ```
 
+## Lazy Objects
+
+`lazy new Name(args)` and `lazy new Name<T>(args)` evaluate arguments now and run the constructor on that same instance the first time its state is observed, when `output.phpVersion` is 8.4 or newer. Below that, the expression is an ordinary `new`. A generic class that stores its type arguments stays lazy, and the constructor observes those arguments. `\Tyhp\Lazy::ghost(\App\User::class)($initializer)` is the binder for an initializer. `\Tyhp\Generic::bind($className, T::int)->ghost(...)` is the call when the class or its type arguments are chosen at runtime.
+
+<a href="tyhp_0152_lazyObjects.html">See full documentation →</a>
+
+```tyhp
+<?tyhp
+
+class User {
+    public function __construct(public int $id) {}
+}
+
+function make(int $id): User {
+    return lazy new User($id);
+}
+```
+
 ## Disposables and the `:=` Operator
 
-Deterministic resource management via `IsDisposable`/`AsyncIsDisposable` interfaces. `:=` (using assignment) auto-disposes on scope exit. `using` blocks provide explicit try/finally disposal.
+Deterministic resource management via `IsDisposable`/`AsyncIsDisposable` interfaces. `:=` (using assignment) auto-disposes on scope exit. `using` blocks provide explicit try/finally disposal. An uninitialized lazy object is not disposed.
 
 <a href="tyhp_2300_disposables.html">See full documentation →</a>
 
@@ -467,7 +485,7 @@ async function load(string $url): void {
 
 ## Async and Await
 
-First-class `async`/`await` using PHP Fibers. An async function's declared return type is the type you get when you `await` it; calling it returns a `Promise` of that type. Async code lowers to `Promise::_async` / `_await`. Blocking PHP I/O blocks the `tyhp/async` loop. Includes combinators (`Promise::all`, `race`, `batch`, `timeout`), async iteration, and cancellation tokens.
+First-class `async`/`await` using PHP Fibers. An async function's declared return type is the type you get when you `await` it; calling it returns a `Promise` of that type. The keywords lower to `Promise::_async` / `_await`. PHP calls `await(async(fn (): int => 42))` and `$promise->wait()`. `then`, `resolved`, `all`, `race`, `any`, `timeout`, `whenAll`, `whenAny`, `resolve`, and `run` are plain `#[\Tyhp\InferGeneric]` calls. `reject`, `allSettled`, `batch`, and `withResolvers` are binders: `Promise::reject()($e)`, `Promise::withResolvers(T::int)()`. Blocking PHP I/O blocks the `tyhp/async` loop. Includes async iteration and cancellation tokens.
 
 <a href="tyhp_2600_asyncAndAwait.html">See full documentation →</a>
 

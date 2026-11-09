@@ -84,14 +84,22 @@ function validateAge(int $age): void {
 
 // ORM/serialization example
 class UserQuery {
-    public function orderBy(string $field): self {
+    public function orderBy(__PropertyName<User> $field): self {
         $this->orderField = $field;
         return $this;
     }
 }
 
-// Refactoring-safe field reference:
+// Refactoring-safe field reference. nameof(User::$name) is __PropertyName<User>.
 $query->orderBy(nameof(User::$name)); // 'name'
+
+#[\Attribute(\Attribute::TARGET_CLASS)]
+class Label<T> {
+    public function __construct(public __PropertyName<T> $property) {}
+}
+
+#[Label<User>(nameof(User::$name))]
+class Profile {}
 ```
 
 ```php
@@ -106,6 +114,14 @@ function validateAge(int $age): void {
 }
 
 $query->orderBy('name');
+
+#[\Attribute(\Attribute::TARGET_CLASS)]
+class Label {
+    public function __construct(public string $property) {}
+}
+
+#[Label('name')]
+class Profile {}
 ```
 
 :::tip
@@ -152,7 +168,7 @@ if (\Tyhp\Type::is($value, \Tyhp\Type::string())) {
     echo 'Value is a string';
 }
 
-return ($this->__tyhpGeneric->resolvedType(\Repository::class, 'T'));
+return ($this->__tyhpGeneric->resolvedType(\Repository::class, 'T')); // layout-1 class bag
 ```
 
 `typeof(UserId)` and `UserId()` emit the same factory call. `typeof(Optional<int>)` is how to spell a generic alias as a Type value; `Optional(typeof(int))` is the factory with a `\Tyhp\Type` argument. `Optional<int>()` is invalid.
@@ -310,7 +326,7 @@ Beyond the four compile-time constructs above, Tyhp has several other features t
 
 - Type aliases (`type MyType = int|string`) — hints expand to the underlying type with no runtime trace. A source `.tyhp` alias *declaration* also emits a `\Tyhp\Type` factory (`UserId()`, `Optional(\Tyhp\Type::int())`) so PHP and `typeof` can name it at runtime. Tyhpdef aliases inline unless they carry `#[\Tyhp\GenericRuntime(aliasFactory: …)]`. See [Type Aliases](tyhp_0700_typeAliases.md).
 - Structs — compiled to PHP associative arrays. Struct declarations are erased; struct property access compiles to array key access.
-- Generics — type parameters are erased from PHP signatures. Tracking (`HasGenerics`, factories, binders) is emitted only when the bound type is used at runtime or a generic-typed property remains. Every emitted generic class/method/function is stamped `#[\Tyhp\GenericRuntime]`. Foreign compiled-library sites use `\Tyhp\Generic::bind`; PHP / `typeof` interop for aliases still uses `aliasFactory` (not `bind`). See [Generics](tyhp_0500_generics.md).
+- Generics — type parameters are erased from PHP signatures. Tracking (`HasGenerics`, the layout-1 class factory, layout-2 binders) is emitted only when the bound type is used at runtime or a generic-typed property remains. Every emitted generic class, method, and function is stamped `#[\Tyhp\GenericRuntime]`. A layout-2 method emits `name(types)(args)`. `#[\Tyhp\InferGeneric]` keeps the plain call and a `name__tyhpGeneric` companion. A Tyhp `new` of a foreign class emits `\Tyhp\Generic::bind`. PHP / `typeof` interop for aliases still uses `aliasFactory`. See [Generics](tyhp_0500_generics.md).
 - Static value types (__ClassName, __FunctionName, etc.) — compile-time string subtypes that are erased to plain string in PHP output.
 - Type guard return types ($param is Type) — compiled to bool return type in PHP output. The type narrowing information is used only by the checker.
 - Function and method overload signatures — only the implementation body is emitted to PHP (for an interface or `abstract` method, the last signature). Overload signatures are compile-time declarations that callers are checked against. See [Function and Method Overloads](tyhp_1200_functionOverloads.md).

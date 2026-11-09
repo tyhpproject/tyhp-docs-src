@@ -2700,6 +2700,63 @@ Below PHP 8.5, `clone … with` on a readonly property is lowered to a subclass 
 Raise `output.phpVersion` to 8.5. `new … with` on the same class is available from PHP 8.3.
 :::
 
+:::member[TYHP4402 (Error)]
+**CheckerLazyNewNotCapable.** Message: <code>`lazy new` cannot construct `{0}`</code>.
+
+A `lazy new` expression creates a lazy ghost that initializes in place and keeps its identity. Internal classes other than `\stdClass`, a class that extends an internal class other than `\stdClass`, and a struct, interface, enum, trait, or other non-class cannot be constructed that way.
+:::
+
+:::member[TYHP4403 (Warning)]
+**CheckerLazyNewHasNoLazyProperty.** Message: <code>`{0}` has no lazy-capable instance property, so `lazy new` runs the constructor immediately</code>.
+
+A lazy ghost stays uninitialized only when the class stores at least one instance property. A generic class that Tyhp tracks at runtime stores its type-argument bag, so it counts. Static properties and virtual properties do not. For a class with none, PHP returns a normal object and never calls the initializer, so Tyhp emits an ordinary `new` and the constructor runs immediately. The expression is still valid.
+:::
+
+:::member[TYHP4404 (Error)]
+**CheckerGenericOnMagicMethod.** Message: <code>Magic method `{0}` cannot declare type parameters</code>.
+
+PHP dispatches a magic method by its declared name and signature. A type parameter would replace that method with a binder that returns a closure, so the engine would no longer call it.
+:::
+
+:::member[TYHP4405 (Error)]
+**CheckerGenericOverridesNonGenericMethod.** Message: <code>`{0}` cannot declare type parameters because `{1}` is not generic</code>.
+
+A non-erased generic method is emitted as a binder that takes type arguments and returns a closure. That shape cannot override or implement a method PHP calls with the original value signature.
+:::
+
+:::member[TYHP4406 (Error)]
+**CheckerGenericClassReservedMemberName.** Message: <code>`{0}::{1}` is reserved because `{2}` is a generic class</code>.
+
+A generic class generates `new()` and `type()`. A method with either name on that class, or on an ancestor, collides with the generated method.
+:::
+
+:::member[TYHP4407 (Error)]
+**CheckerInferGenericNotInferable.** Message: <code>Type parameter `{0}` on `#[\Tyhp\InferGeneric]` cannot be inferred from the arguments</code>.
+
+Every type parameter on an `#[\Tyhp\InferGeneric]` function or method has to be reachable from an argument: a callable return, a class-string, a value of that type, a `Promise` of that type, or an array or variadic list of such promises. A type that appears only in the return type has no argument to read.
+:::
+
+:::member[TYHP4408 (Warning)]
+**CheckerInferGenericOnNonGeneric.** Message: <code>`#[\Tyhp\InferGeneric]` is on `{0}`, which has no type parameters</code>.
+
+`#[\Tyhp\InferGeneric]` tells the compiler to infer type parameters from the arguments and to keep a value-signature method beside the companion. A declaration with no type parameters has nothing to infer.
+:::
+
+:::member[TYHP4409 (Error)]
+**CheckerWithEntryUnkeyed.** Message: <code>Entries need a property name: `name =&gt; value`</code>.
+Run <code>tyhp --explain TYHP4409</code> for the long-form explanation.
+:::
+
+:::member[TYHP4410 (Error)]
+**CheckerWithSpreadNotStruct.** Message: <code>Only a struct value can be spread into `{0}`; `{1}` is not a struct</code>.
+Run <code>tyhp --explain TYHP4410</code> for the long-form explanation.
+:::
+
+:::member[TYHP4411 (Error)]
+**CheckerWithSpreadExtraField.** Message: <code>Spread source `{1}` has field `{0}`, which `{2}` does not declare</code>.
+Run <code>tyhp --explain TYHP4411</code> for the long-form explanation.
+:::
+
 :::member[TYHP4500 (Warning)]
 **CheckerDeprecatedUsage.** Message: <code>`{0}` is deprecated{1}</code>.
 

@@ -387,7 +387,7 @@ See [Extensions in Tyhpdef](tyhpdef_extensions.md) for the tyhpdef `extension Na
 
 For the full tyhpdef reference (standalone `extension Name { }`, thin class-body mappings, native vs mapped operators, and `use extension` on a class), see [Extensions in Tyhpdef](tyhpdef_extensions.md).
 
-Inside a tyhpdef class body you can declare `extension fn` and `extension operator` members as thin `=>` mappings. The compiler treats them as a synthetic extension for that class: `$this` in an `extension fn` and `self` in an inline `extension operator` resolve to the enclosing tyhpdef class. These members cannot use `abstract` or `final`. Without `#[\Tyhp\GenericRuntime]` they splice (or erase) — PHP cannot call them. A compiled-library mapping that stamps `GenericRuntime` is not a splice candidate; foreign `$s->jsonDecodeAs<User>()` goes through `\Tyhp\Generic::bind` rather than baking the binder name.
+Inside a tyhpdef class body you can declare `extension fn` and `extension operator` members as thin `=>` mappings. The compiler treats them as a synthetic extension for that class: `$this` in an `extension fn` and `self` in an inline `extension operator` resolve to the enclosing tyhpdef class. These members cannot use `abstract` or `final`. Without `#[\Tyhp\GenericRuntime]` they splice (or erase) — PHP cannot call them. A compiled-library mapping that stamps `GenericRuntime` with `layouts: [2]` is not a splice candidate. A foreign call emits the declared name as the binder, `jsonDecodeAs($type)($json)`. An `#[\Tyhp\InferGeneric]` mapping with explicit type arguments emits the `name__tyhpGeneric` companion.
 
 ### Operators: native vs mapped
 
@@ -709,3 +709,13 @@ See [PHP Version Gating](tyhp_0320_phpVersionGating.md).
 - Accessing private or protected members of the extended type from an extension method.
 - Using a regular use statement instead of use extension for importing extensions.
 - `#[\Tyhp\Php]` on an `extension` declaration (**TYHP4304**). Use `declare(php=…)` (file-level `;` form today).
+
+## The tyhp PHP module
+
+`ext-tyhp` is the Composer name of an optional PHP module, not an `extension { }` block. The loaded name is `tyhp`. It is not required. Tyhp runtime code still behaves as specified when the module is not installed. Installing it is recommended. It improves the performance and stability of Tyhp runtime code. No Tyhp package requires it. Packages that use it suggest it. Install it with PIE, not `composer require`:
+
+```bash
+pie install tyhp/ext-tyhp
+```
+
+The runtime checks `extension_loaded('tyhp')` once per process, then `phpversion('tyhp') >= 0.1.0`. A missing or older module is ignored. There is no warning.
