@@ -1610,11 +1610,11 @@ Prefer declaring the property as nullable with an explicit null default (`?T $pr
 :::
 
 :::member[TYHP4159 (Error)]
-**CheckerStructRequiredPropertyNotSet.** Message: <code>Required struct property `{0}` on `{1}` must be set via `new ... with [...]`</code>.
+**CheckerStructRequiredPropertyNotSet.** Message: <code>Required struct property `{0}` on `{1}` must be set via `{2}`</code>.
 
-Struct properties that are non-nullable and have no default value are required. They cannot be omitted from construction — supply them with `new StructName() with [prop => value, ...]`.
+Struct properties that are non-nullable and have no default value are required. The message names the form that was written: `new StructName[prop => value]` for a bracket initializer, `new StructName() with [prop => value]` for `with`, and either form for a bare `new StructName()`.
 
-Nullable properties (and properties with defaults) remain optional at construction.
+Nullable properties and properties with defaults stay optional.
 :::
 
 :::member[TYHP4160 (Error)]
@@ -2755,6 +2755,42 @@ Run <code>tyhp --explain TYHP4410</code> for the long-form explanation.
 :::member[TYHP4411 (Error)]
 **CheckerWithSpreadExtraField.** Message: <code>Spread source `{1}` has field `{0}`, which `{2}` does not declare</code>.
 Run <code>tyhp --explain TYHP4411</code> for the long-form explanation.
+:::
+
+:::member[TYHP4412 (Error)]
+**CheckerStructInitializerOnNonStruct.** Message: <code>`new {0}[...]` constructs a struct, but `{0}` is a `{1}`{2}</code>.
+
+A bracket initializer constructs a struct. The name after `new` is a class, interface, enum, trait, `self` / `static` / `parent`, an object shape, or a type alias. When that name is a class that can be constructed, write `new Name() with [prop => value]`.
+:::
+
+:::member[TYHP4413 (Error)]
+**CheckerStructEntryUnkeyed.** Message: <code>Struct entries need a property name: `name =&gt; value`</code>.
+
+A struct initializer and a struct `with` list set fields by name. An entry with no key, such as `new Point[1.0, 2.0]` or `$p with [1.0]`, does not name a property. Write `name => value`.
+:::
+
+:::member[TYHP4414 (Error)]
+**CheckerStructSpreadNotStruct.** Message: <code>Only a struct value can be spread into `{0}`; `{1}` is not a struct</code>.
+
+Spreading into a struct copies that value's fields. The source has to be a named struct, a generic struct instance, or an anonymous struct. An array, `mixed`, a nullable struct, or a union has no fixed set of fields, so it cannot be spread.
+:::
+
+:::member[TYHP4415 (Error)]
+**CheckerStructSpreadExtraField.** Message: <code>Spread source `{1}` has field `{0}`, which `{2}` does not declare</code>.
+
+A spread copies every field of the source into the constructed struct. A field the target does not declare, including fields inherited through `extends`, would become an extra array key. Remove that field from the source or add it to the target.
+:::
+
+:::member[TYHP4416 (Error)]
+**CheckerStructSpreadKeyMismatch.** Message: <code>Field `{0}` maps to key `{1}` in `{2}` but key `{3}` in `{4}`; spread cannot rename keys</code>.
+
+Spread copies PHP array keys as they are. A field alias (`'status_code' as $statusCode`, or `0 as $arg1`) is that key. When the same field maps to a different key on the target, the spread cannot rename it. Use the same alias on both structs, or set the field with `name => value`.
+:::
+
+:::member[TYHP4417 (Error)]
+**CheckerStructInitializerFollowedByWith.** Message: <code>A struct initializer cannot be followed by `with`; put every entry in `new {0}[...]`</code>.
+
+A bracket initializer is already the struct's entry list. A following `with` would start a second list on that result. Put every entry inside the brackets: `new Name[name => 'a', retries => 5]`.
 :::
 
 :::member[TYHP4500 (Warning)]

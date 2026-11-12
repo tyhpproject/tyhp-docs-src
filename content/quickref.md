@@ -211,14 +211,14 @@ function getExitCode(): 0|1|2 { return 0; }
 
 ## Structs
 
-Lightweight value types that compile to PHP associative arrays. PHP sees `array`; there is no runtime shape check. Support typed properties, defaults, array key aliases (`as`), inheritance, anonymous declarations, and updates with `with`.
+Lightweight value types that compile to PHP associative arrays. PHP sees `array`; there is no runtime shape check. Support typed properties, defaults, array key aliases (`as`), inheritance, anonymous declarations, and updates with `with`. Construct one with `new Point[x => 10.5, y => 20.3]`, the same as `new Point() with [x => 10.5, y => 20.3]`; `new Point[]` is the same as `new Point()`.
 
 <a href="tyhp_0400_structs.html">See full documentation →</a>
 
 ```tyhp
 type Point = struct { float $x; float $y; };
 
-Point $p = new Point() with [x => 10.5, y => 20.3];
+Point $p = new Point[x => 10.5, y => 20.3];
 Point $p2 = clone $p with [x => 5.0];
 
 type ApiResponse = struct {
@@ -328,7 +328,7 @@ class NamedPoint extends Point {
 
 ## The `with` Keyword
 
-Sets properties on objects and structs after `new`, `clone`, or in place. Object `with` mutates identity; struct `with` rebinds an array — the same distinction as passing an object vs passing an array into a PHP function. Combined with `readonly` properties, `clone $obj with [...]` leaves the original unchanged.
+Sets properties on objects and structs after `new`, `clone`, or in place. A struct is constructed with `new Point[...]`. Object `with` mutates identity; struct `with` rebinds an array — the same distinction as passing an object vs passing an array into a PHP function. Combined with `readonly` properties, `clone $obj with [...]` leaves the original unchanged.
 
 <a href="tyhp_2200_withKeyword.html">See full documentation →</a>
 

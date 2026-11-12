@@ -94,8 +94,6 @@ The result array has `command`, `exitCode`, `signal` (`0` when the process exite
 
 Omit `$options` for `input` `''` and `timeoutMs` `0`. An array you pass is used as given, so include `input` and `timeoutMs`. `cwd` and `env` may be omitted. `input` is written to stdin, then the pipe is closed. `timeoutMs` `0` means no limit.
 
-In `tyhp/io` `805.0.4`, `runAsync` and `mustRunAsync` throw on every call, with or without `$options`: the package never loads the `ProcessResult` type declaration (`\Tyhp\Exceptions\InvalidTypeException`), and once that is loaded the process runner reads the options array as an object (`\TypeError`).
-
 ## Files
 
 All of these except `linesAsync` return a promise. Pass an optional `\Tyhp\CancellationToken`. A cancelled read or write stops at the next chunk. A cancelled write can leave a partial file.

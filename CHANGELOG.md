@@ -13,6 +13,8 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ### Changed
 
+- Structs, the with keyword, type aliases, the Quick Reference, the syntax FAQ, and struct examples on the tyhp/core, tyhp/io, and tyhp/parallel pages: a struct is constructed with `new Name[prop => value]`, including generic and anonymous structs and spreading another struct.
+- Diagnostic Code Reference: TYHP4412–TYHP4417, and TYHP4159 names the construction form that was written.
 - Parsable Lambdas, the tyhp/lambda package, tyhp/lambda for PHP, the interop contract, tyhp/core for PHP, the tyhp/io package, tyhp/io for PHP, Runtime Packages Overview, the tyhp/parallel package, and Extensions: the optional `tyhp` module (`pie install tyhp/ext-tyhp`) is recommended and never required. PHP packages build expression trees with the fluent API, and PHP that knows the module is loaded may pass a closure. DNS uses the module when it is loaded and goes through `Offload` otherwise.
 - Packages for PHP, tyhp/core for PHP, the tyhp/core package page, and Rhetoric for PHP getting started: `_gnrc` takes the same type arguments as `Generic::bind`, including `T::int`.
 - Rhetoric for PHP: samples call `table(Post::class)()`, `model(Post::class)()`, `belongsTo(Blog::class)($path)`, `ContextFactory::new(Context::class)()`, `EloquentQuery::query(Model::class)()`, `select(Post::class)($sql)`, and `transaction(T::int)($callback)`. `entry($model)` and `Expression::of` are ordinary calls (`rhetoric_php_getting_started.md`, and the mapping, querying, saving, Laravel, translation, and coming-from-EF pages).
@@ -25,6 +27,8 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ### Fixed
 
+- tyhp/io for PHP: the `Process` section describes `runAsync` and `mustRunAsync` as returning a promise of a `ProcessResult` array. `mustRunAsync` throws `ProcessFailedException` when `exitCode` is not 0.
+- Diagnostic Code Reference: TYHP4412 suggests `new Name() with [...]` only when that name is a class that can be constructed.
 - Packages for PHP, tyhp/async for PHP, tyhp/lambda for PHP, and Lazy Objects: those pages state the call or syntax to write.
 
 ## 2026-11-04

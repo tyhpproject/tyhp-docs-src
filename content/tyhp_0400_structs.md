@@ -20,7 +20,7 @@ Per-key `ArrayAccess` over a struct schema is `\Tyhp\Contracts\ArrayAccessShape<
 
 ## Defining a Struct
 
-A named struct is a `type` alias whose right-hand side is a struct shape. Each property must have an explicit type annotation and ends with a semicolon. `new Alias() with […]` constructs the array.
+A named struct is a `type` alias whose right-hand side is a struct shape. Each property must have an explicit type annotation and ends with a semicolon. `new Point[x => 1.0, y => 2.0]` constructs the array.
 
 ```tyhp
 <?tyhp
@@ -50,7 +50,7 @@ type UserProfile = struct {
 
 ## Property Types and Defaults
 
-Every struct property must have an explicit type annotation. Type inference is not allowed in struct property declarations. Properties without an initializer (`=`) are **required** at `new` — there are no implicit zeros for non-nullable fields. Omitting a required key is **TYHP CheckerStructRequiredPropertyNotSet**. Nullable properties without an explicit default default to `null` and are optional.
+Every struct property must have an explicit type annotation. Type inference is not allowed in struct property declarations. Properties without an initializer (`=`) are **required** — there are no implicit zeros for non-nullable fields. Omitting a required property is **TYHP4159**. Nullable properties without an explicit default default to `null` and are optional.
 
 ```tyhp
 <?tyhp
@@ -64,10 +64,10 @@ type Config = struct {
     float $timeout = 0.0;          // Optional — default 0.0
 };
 
-// ERROR — required $host is missing
-// Config $bad = new Config();
+// ERROR — required $host is missing (TYHP4159)
+// Config $bad = new Config[];
 
-Config $ok = new Config() with [host => 'localhost'];
+Config $ok = new Config[host => 'localhost'];
 ```
 
 A nullable property without a default is left out of the array when you omit it, and reading it yields `null`:
@@ -77,7 +77,7 @@ A nullable property without a default is left out of the array when you omit it,
 
 type Opts = struct { string $name; ?string $nick; };
 
-Opts $o = new Opts() with [name => 'ann'];
+Opts $o = new Opts[name => 'ann'];
 ?string $nick = $o->nick;   // null; compiles to ($o['nick'] ?? null)
 ```
 
@@ -92,11 +92,11 @@ type Inner = struct {
 };
 
 type Outer = struct {
-    Inner $inner = new Inner();
+    Inner $inner = new Inner[];
     int $n = 0;
 };
 
-Outer $o = new Outer();
+Outer $o = new Outer[];
 ```
 
 ```php
@@ -123,7 +123,7 @@ type CallbackArgs = struct {
     ?mixed 1 as $arg2;
 };
 
-ApiResponse $response = new ApiResponse() with [
+ApiResponse $response = new ApiResponse[
     statusCode => 0,
     errorMessage => '',
     items => [],
@@ -131,7 +131,7 @@ ApiResponse $response = new ApiResponse() with [
 $response->statusCode = 200;     // Accesses $response['status_code']
 $response->errorMessage = '';     // Accesses $response['error-message']
 
-CallbackArgs $args = new CallbackArgs() with [arg1 => "hello"];
+CallbackArgs $args = new CallbackArgs[arg1 => "hello"];
 $first = $args->arg1;            // Accesses $args[0]
 ```
 
@@ -150,7 +150,15 @@ $first = $args[0];
 
 ## Instantiation
 
-Structs are instantiated with the new keyword. Properties without `=` must be set in the `with` clause; `new Point()` is an error if `$x` and `$y` are required. When every value is known at compile time, `new Point() with [...]` folds to a single array literal. Otherwise `with` emits `\array_replace`.
+A struct is constructed with a bracket list after the name. `new Point[x => 10.5, y => 20.3]` is the same as `new Point() with [x => 10.5, y => 20.3]`, and `new Point[]` is the same as `new Point()`. With no spread, both emit the same array literal when every value is known at compile time.
+
+A non-nullable property without a default is required. **TYHP4159** names the form that was written: `new Point[x => value]` for a bracket initializer, `new Point() with [x => value]` for `with`, and either form for a bare `new Point()`.
+
+Keys are property names, bare or quoted (`x =>`, `'x' =>`). A keyword is a name in key position (`class =>`). Trailing commas are allowed, and a newline may separate the name from `[`. Each entry is `name => value` or a spread (`...$src`). An entry with no key, such as `new Point[1.0, 2.0]`, is **TYHP4413**. An unknown property is **TYHP4031**.
+
+The bracket list is the whole initializer. `new Opts[name => 'a'] with [retries => 5]` is **TYHP4417**. Reading a field off the new value needs parentheses: `(new Point[x => 1.0, y => 2.0])->x`.
+
+The list constructs a named struct, a generic struct (`new Box<int>[value => 42]`), or an anonymous struct. The name has to be the struct itself: `type Point = struct { … }` is constructed as `new Point[…]`, but a name that resolves to a class, interface, enum, `self`, `static`, `parent`, an object shape, or a type alias of another name (`type P2 = Point`; construct it as `new Point[…]`) is **TYHP4412**. A name that does not resolve keeps the unresolved-name diagnostic.
 
 ```tyhp
 <?tyhp
@@ -160,13 +168,12 @@ type Point = struct {
     float $y;
 };
 
-// ERROR — required x and y are not set
-// Point $origin = new Point();
+// ERROR — required x and y are not set (TYHP4159)
+// Point $missing = new Point[];
 
-// Instantiate with overrides using the with keyword
-Point $p = new Point() with [
+Point $p = new Point[
     x => 10.5,
-    y => 20.3
+    y => 20.3,
 ];
 
 type Origin = struct {
@@ -174,17 +181,92 @@ type Origin = struct {
     float $y = 0.0;
 };
 
-Origin $origin = new Origin();  // OK — defaults fill x and y
+Origin $origin = new Origin[];  // defaults fill x and y
+
+type Token = struct {
+    string $class;
+    string $name;
+};
+
+Token $t = new Token[
+    class => 'keyword',
+    'name' => 'with',
+];
+
+float $x = (new Point[x => 1.0, y => 2.0])->x;
 ```
 
 ```php
 <?php
-// PHP output — struct instantiation becomes array creation
-// Known defaults + with fold to one array (no array_replace)
+// PHP output — a bracket initializer with no spread is an array literal
 
 $p = ['x' => 10.5, 'y' => 20.3];
 
 $origin = ['x' => 0.0, 'y' => 0.0];
+
+$t = ['class' => 'keyword', 'name' => 'with'];
+```
+
+## Spread
+
+A spread copies every field of another struct into the result. It is an entry in a bracket initializer and in every struct `with` list: `new X() with`, `clone $x with`, and `$x with`. Later entries override earlier ones. Defaults apply first.
+
+The source has to be a named struct, a generic struct instance, or an anonymous struct. An array, `mixed`, a nullable struct, or a union is **TYHP4414**. Every field of the source must exist on the target, including fields inherited through `extends`; an extra field is **TYHP4415**. Each source field's type must be assignable to the target field (**TYHP4008**). The PHP array keys must be the same, including an alias such as `'status_code' as $statusCode` or `0 as $arg1`. When the keys differ, the spread cannot rename the field (**TYHP4416**).
+
+A required target field is satisfied by a keyed entry, or by a spread whose source requires that field or gives it a default. A nullable source field without a default may be absent, so it does not satisfy a required target field. A spread source also takes part in inferring a generic struct's type arguments.
+
+With a spread, the compiler emits `\array_replace`. Each spread is one argument, in source order, and consecutive keyed entries fold into one array. `\array_replace` keeps integer keys, so an alias such as `mixed 0 as $arg1` stays key `0`.
+
+```tyhp
+<?tyhp
+
+type Opts = struct {
+    string $name;
+    int $retries = 3;
+    ?string $nick;
+};
+
+Opts $base = new Opts[name => 'ann'];
+Opts $copy = new Opts[...$base, name => 'bob', nick => 'a'];
+Opts $merged = clone $base with [...$copy];
+```
+
+```php
+<?php
+
+$base = ['retries' => 3, 'name' => 'ann'];
+$copy = \array_replace($base, ['name' => 'bob', 'nick' => 'a']);
+$merged = \array_replace($base, $copy);
+```
+
+`$base` carries `retries` because that field has a default, and leaves `nick` out because a nullable field without a default is omitted. The later `name` and `nick` override the spread. `nick` is still absent from `$base` when nothing sets it.
+
+A nullable source field without a default may be absent, so the spread does not replace the target's default. The compiler keeps the default in front of the spread:
+
+```tyhp
+<?tyhp
+
+type Loose = struct {
+    string $name;
+    ?int $retries;
+};
+
+type Dest = struct {
+    string $name;
+    ?int $retries = 3;
+};
+
+function keepDefault(Loose $src): Dest {
+    return new Dest[...$src];
+}
+```
+
+```php
+<?php
+
+function keepDefault(array $src): array {
+    return \array_replace(['retries' => 3], $src);
+}
 ```
 
 ## Property Access
@@ -199,7 +281,7 @@ type User = struct {
     int $age;
 };
 
-User $user = new User() with [name => 'Alice', age => 30];
+User $user = new User[name => 'Alice', age => 30];
 
 // Read access
 string $n = $user->name;
@@ -212,7 +294,7 @@ $user->age = 31;
 ```php
 <?php
 // PHP output — arrow access compiles to array key access
-// Folded new ... with [...] when defaults are known
+// A bracket initializer with no spread folds to one array
 
 $user = ['name' => 'Alice', 'age' => 30];
 
@@ -238,7 +320,7 @@ type Person = struct {
     int $age;
 };
 
-Person $person = new Person() with [name => 'Alice', age => 30];
+Person $person = new Person[name => 'Alice', age => 30];
 
 // OK — Person has all properties that Named requires
 Named $named = $person;
@@ -265,11 +347,11 @@ type UserEntity = struct extends BaseEntity {
 };
 
 // UserEntity has: $id, $createdAt, $name, $email
-UserEntity $user = new UserEntity() with [
+UserEntity $user = new UserEntity[
     id => 1,
     createdAt => '2025-01-01',
     name => 'Alice',
-    email => 'alice@example.com'
+    email => 'alice@example.com',
 ];
 ```
 
@@ -299,10 +381,14 @@ type CallableArgs2<T1, T2> = struct extends CallableArgs1<T1> {
     T2 1 as $_2;
 };
 
-Box<int> $box = new Box() with [value => 42];
+Box<int> $box = new Box<int>[value => 42];
 int $n = $box->value;
 
-CallableArgs2<string, int> $args = new CallableArgs2<string, int>() with [
+// The type arguments come from the declared type. Without one,
+// `new Box[value => 42]` is `Box<mixed>`.
+Box<int> $inferred = new Box[value => 42];
+
+CallableArgs2<string, int> $args = new CallableArgs2<string, int>[
     _1 => "hello",
     _2 => 42,
 ];
@@ -315,6 +401,7 @@ string $first = $args->_1;  // inherited; type is string
 
 $box = ['value' => 42];
 $n = $box['value'];
+$inferred = ['value' => 42];
 
 $args = [0 => "hello", 1 => 42];
 $first = $args[0];
@@ -322,7 +409,7 @@ $first = $args[0];
 
 ## Anonymous Structs
 
-Structs can appear inline in type position without a name — parameters, returns, properties, bounds, and unions. Expression `new struct { … } with […]` still builds a one-off value. Anonymous struct types support everything named structs do: property access and writes, `with`, `clone … with`, `isset`, `??`, and array key aliases. Group a struct type as an arm of `|` / `&` with parentheses.
+Structs can appear inline in type position without a name — parameters, returns, properties, bounds, and unions. `new struct { … }[…]` builds a one-off value. Anonymous struct types support everything named structs do: property access and writes, `with`, `clone … with`, `isset`, `??`, and array key aliases. Group a struct type as an arm of `|` / `&` with parentheses.
 
 ```tyhp
 <?tyhp
@@ -331,14 +418,14 @@ Structs can appear inline in type position without a name — parameters, return
 struct { string $name; int $age; } $person = new struct {
     string $name;
     int $age;
-} with [name => 'Alice', age => 30];
+}[name => 'Alice', age => 30];
 
 // Anonymous struct as a function return type
 function getCoords(): struct { float $lat; float $lng; } {
     return new struct {
         float $lat;
         float $lng;
-    } with [lat => 40.7128, lng => -74.0060];
+    }[lat => 40.7128, lng => -74.0060];
 }
 
 function maybeOrigin(): (struct { float $lat; float $lng; }) | null {
@@ -369,7 +456,7 @@ type Point = struct {
     float $y;
 };
 
-Point $p1 = new Point() with [x => 1.0, y => 2.0];
+Point $p1 = new Point[x => 1.0, y => 2.0];
 
 // Create a modified copy — $p1 is unchanged
 Point $p2 = clone $p1 with [x => 5.0];
@@ -402,7 +489,7 @@ type Point = struct {
     float $y;
 };
 
-Point $p = new Point() with [x => 1.0, y => 2.0];
+Point $p = new Point[x => 1.0, y => 2.0];
 
 // In-place update — $p is reassigned with the new value of x
 $p with [x => 9.0];
@@ -419,7 +506,7 @@ $p = \array_replace($p, ['x' => 9.0]);
 ```
 
 :::note
-All three forms of with on a struct — after new, after clone, and in place on an existing value — emit as `\array_replace` when the result cannot be folded. `new Point() with [...]` folds to a single array literal when every value is known at compile time. Bare `clone $p` on a struct is a no-op (`$p` is returned as-is).
+`clone … with` and in-place `with` emit `\array_replace` when the result cannot be folded. A bracket initializer with no spread folds to a single array literal when every value is known at compile time. Bare `clone $p` on a struct is a no-op (`$p` is returned as-is).
 :::
 
 ## Structs as Function Parameters
@@ -438,7 +525,7 @@ function calculateArea(Dimensions $dims): float {
     return $dims->width * $dims->height;
 }
 
-Dimensions $box = new Dimensions() with [width => 10.0, height => 5.0];
+Dimensions $box = new Dimensions[width => 10.0, height => 5.0];
 float $area = calculateArea($box);  // 50.0
 ```
 
@@ -479,7 +566,15 @@ Use the with keyword to create modified copies instead of mutating structs in pl
 ## Common Mistakes
 
 :::danger
-Don't omit required struct properties at `new`. A non-nullable property without `=` has no implicit zero; `new Point()` is an error unless every required key is set via `with` or has a default.
+Don't omit a required struct property. A non-nullable property without `=` has no implicit zero. `new Point[]` reports **TYHP4159** until `x` and `y` are set (`new Point[x => 1.0, y => 2.0]`).
+:::
+
+:::danger
+Don't leave a struct entry unkeyed. `new Point[1.0, 2.0]` and `$p with [1.0]` are **TYHP4413**. Write `x => 1.0`, or spread a struct with `...$src`.
+:::
+
+:::danger
+A bracket list constructs a struct. `new User[...]` when `User` is a class is **TYHP4412**, and the message suggests `new User() with [...]`. `new Opts[name => 'a'] with [retries => 5]` is **TYHP4417**: the bracket list is already the whole initializer.
 :::
 
 :::danger

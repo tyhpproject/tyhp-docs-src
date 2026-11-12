@@ -361,7 +361,7 @@ Sends a `GET` request, requires a 2xx status, and decodes the JSON body into the
 
 ### HttpRequest
 
-`HttpRequest` is a struct describing one request for `sendAsync()`. Build it with `new HttpRequest() with [...]` and set only the fields you need.
+`HttpRequest` is a struct describing one request for `sendAsync()`. Build it with `new HttpRequest[...]` and set only the fields you need.
 
 ```tyhp
 <?tyhp
@@ -498,7 +498,7 @@ use Tyhp\Io\Http\HttpRequest;
 use Tyhp\Io\Http\HttpResponse;
 
 async function putDocumentAsync(HttpClient $client, string $url, string $json): bool {
-    HttpRequest $request = new HttpRequest() with [
+    HttpRequest $request = new HttpRequest[
         url => $url,
         method => 'PUT',
         headers => ['Content-Type' => 'application/json'],
@@ -625,7 +625,7 @@ use Tyhp\Io\Process\ProcessResult;
 async function currentCommitAsync(string $repoDir): string {
     ProcessResult $result = await Process::mustRunAsync(
         ['git', 'rev-parse', 'HEAD'],
-        new ProcessOptions() with [cwd => $repoDir, timeoutMs => 5000]
+        new ProcessOptions[cwd => $repoDir, timeoutMs => 5000]
     );
     return \trim($result->stdout);
 }
@@ -649,7 +649,7 @@ async function prettyPrintAsync(string $json): string {
     try {
         ProcessResult $result = await Process::mustRunAsync(
             ['jq', '.'],
-            new ProcessOptions() with [input => $json, timeoutMs => 2000]
+            new ProcessOptions[input => $json, timeoutMs => 2000]
         );
         return $result->stdout;
     } catch (ProcessFailedException $e) {
@@ -1074,7 +1074,7 @@ use Tyhp\Io\Redis\RedisClient;
 use Tyhp\Io\Redis\RedisOptions;
 
 async function sessionDemoAsync(string $password): void {
-    RedisClient $redis = await RedisClient::connectAsync(new RedisOptions() with [
+    RedisClient $redis = await RedisClient::connectAsync(new RedisOptions[
         host => 'cache.internal',
         password => $password,
         database => 2,
@@ -1420,11 +1420,11 @@ final class OrderRepository {
     public async function transferAsync(int $fromAccount, int $toAccount, int $cents): void {
         try {
             array<int, DbResult> $results = await $this->db->transactionAsync([
-                new DbStatement() with [
+                new DbStatement[
                     sql => 'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND balance >= $1',
                     params => [$cents, $fromAccount],
                 ],
-                new DbStatement() with [
+                new DbStatement[
                     sql => 'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
                     params => [$cents, $toAccount],
                 ],
@@ -1485,7 +1485,7 @@ use Tyhp\Io\Db\PdoConnection;
 use Tyhp\Io\Db\PdoOptions;
 
 async function addProductAsync(string $name, float $price): ?string {
-    MySqlConnection $db = await MySqlConnection::connectAsync(new MySqlOptions() with [
+    MySqlConnection $db = await MySqlConnection::connectAsync(new MySqlOptions[
         host => 'db.internal',
         user => 'shop',
         password => 'secret',
@@ -1503,7 +1503,7 @@ async function addProductAsync(string $name, float $price): ?string {
 }
 
 async function recordVisitAsync(string $path): void {
-    PdoConnection $db = new PdoConnection(new PdoOptions() with [dsn => 'sqlite:/var/lib/app/stats.sqlite']);
+    PdoConnection $db = new PdoConnection(new PdoOptions[dsn => 'sqlite:/var/lib/app/stats.sqlite']);
     await $db->queryAsync('CREATE TABLE IF NOT EXISTS visits (path TEXT, at INTEGER)');
     await $db->queryAsync('INSERT INTO visits (path, at) VALUES (?, ?)', [$path, \time()]);
 }
@@ -1731,16 +1731,16 @@ type LinkStatus = struct {
 };
 
 async function checkLinkAsync(HttpClient $client, string $url, CancellationToken $token): LinkStatus {
-    HttpRequest $request = new HttpRequest() with [url => $url, method => 'HEAD', timeoutMs => 10_000];
+    HttpRequest $request = new HttpRequest[url => $url, method => 'HEAD', timeoutMs => 10_000];
     try {
         HttpResponse $response = await $client->sendAsync($request, $token);
-        return new LinkStatus() with [url => $url, status => $response->status];
+        return new LinkStatus[url => $url, status => $response->status];
     } catch (TimeoutException $e) {
-        return new LinkStatus() with [url => $url, error => 'timed out'];
+        return new LinkStatus[url => $url, error => 'timed out'];
     } catch (HttpException $e) {
-        return new LinkStatus() with [url => $url, error => $e->getMessage()];
+        return new LinkStatus[url => $url, error => $e->getMessage()];
     } catch (\InvalidArgumentException $e) {
-        return new LinkStatus() with [url => $url, error => 'not an http(s) URL'];
+        return new LinkStatus[url => $url, error => 'not an http(s) URL'];
     }
 }
 
@@ -1851,7 +1851,7 @@ use Tyhp\Io\Process\ProcessResult;
 use Tyhp\Promise;
 
 async function deployAsync(string $repoDir, string $healthUrl): int {
-    ProcessOptions $inRepo = new ProcessOptions() with [cwd => $repoDir, timeoutMs => 300_000];
+    ProcessOptions $inRepo = new ProcessOptions[cwd => $repoDir, timeoutMs => 300_000];
     try {
         await Process::mustRunAsync(['git', 'pull', '--ff-only'], $inRepo);
 

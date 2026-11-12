@@ -1274,7 +1274,7 @@ function loadUser(string $json): User {
 }
 
 function tryUser(string $json): ?User {
-    User $user = new User() with [id => 0, name => ''];
+    User $user = new User[id => 0, name => ''];
     if (!Json::tryDecode<User>($json, $user)) {
         return null;
     }

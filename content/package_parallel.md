@@ -835,9 +835,9 @@ final class ColumnStatsTask implements ParallelTask<ColumnStats> {
         }
 
         if ($count === 0) {
-            return new ColumnStats();
+            return new ColumnStats[];
         }
-        return new ColumnStats() with [
+        return new ColumnStats[
             count => $count,
             min => $min,
             max => $max,
