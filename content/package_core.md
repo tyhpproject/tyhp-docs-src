@@ -52,7 +52,7 @@ The first `composer require tyhp/core` often does not install the ambient type d
 | Lazy objects | `\Tyhp\Lazy` | You. `lazy new` is compiled; this class is the runtime helper. See [Lazy Objects](tyhp_0152_lazyObjects.md) |
 | Object `with` helper | `\Tyhp\ObjectHelper` | Compiled `with` expressions; also callable directly |
 | Contracts | `\Tyhp\Contracts\IsDisposable`, `Convertible`, `IntConvertible`, `FloatConvertible`, `BoolConvertible`, `StringConvertible`, `ArrayAccessShape<TStruct>` | You implement them |
-| Attributes | `#[\Tyhp\Php]`, `#[\Tyhp\PhpType]`, `#[\Tyhp\NativeTypeTest]`, `#[\Tyhp\EraseGeneric]`, `#[\Tyhp\AllowUnset]`, `#[\Tyhp\GenericRuntime]`, `#[\Tyhp\NoEmit]`, `#[\Tyhp\Optimize\Pure]`, `#[\Tyhp\Optimize\Inline]` | You write most of them; the compiler writes `GenericRuntime` |
+| Attributes | `#[\Tyhp\Php]`, `#[\Tyhp\PhpType]`, `#[\Tyhp\NativeTypeTest]`, `#[\Tyhp\EraseGeneric]`, `#[\Tyhp\GenericRuntime]`, `#[\Tyhp\NoEmit]`, `#[\Tyhp\Optimize\Pure]`, `#[\Tyhp\Optimize\Inline]` | You write most of them; the compiler writes `GenericRuntime` |
 | Exceptions | `\Tyhp\Exceptions\IncompatibleTypeException`, `InvalidTypeException`, `AggregateException`, `PropertyNotFoundException`, `InvalidParametersForOperatorOverloadException` | Thrown by the runtime and by compiled code |
 | Compiled-code plumbing | `PropertyAccessor`, `PropertyAccessorObject`, `PropertyBackingCell`, `GenericObject`, `\Tyhp\Concerns\*` traits | Compiled code only |
 | Composer plugin | `Tyhp\Composer\Plugin` | Composer |
@@ -1561,29 +1561,6 @@ Marks a free function or concrete static method whose return is a type guard (`f
 :::member[#[\Tyhp\EraseGeneric]]
 Opts a generic-typed property, promoted constructor parameter, or every generic-typed property of a class out of runtime property type checks. A class with generic-typed properties is otherwise tracked at runtime so writes are checked against the bound type argument. Uses of `typeof(T)`, `default(T)`, `is T`, `new T()`, or forwarded type arguments still force tracking. Not inherited. Not valid on methods or functions (`TYHP4345`). Compile-time only. See [Generics](tyhp_0500_generics.md).
 :::
-
-### `#[\Tyhp\AllowUnset]`
-
-:::member[#[\Tyhp\AllowUnset]]
-Allows `unset($this->prop)` on a typed property or promoted constructor parameter. Without it, unsetting a typed property is an error (`TYHP4158`), because PHP returns the property to the uninitialized state. With it, the checker treats the property as possibly uninitialized when an instance method starts, so guard reads with `isset()` or `??` (`TYHP4157` otherwise). When "no value" and `null` mean the same thing, declare `?T $prop = null` instead. This attribute is kept in the emitted PHP.
-:::
-
-```tyhp
-<?tyhp
-
-final class Profile {
-    #[\Tyhp\AllowUnset]
-    public string $cachedName;
-
-    public function __construct(string $name) {
-        $this->cachedName = $name;
-    }
-
-    public function forget(): void {
-        unset($this->cachedName);
-    }
-}
-```
 
 ### `#[\Tyhp\GenericRuntime]`
 

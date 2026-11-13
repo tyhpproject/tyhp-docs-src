@@ -47,7 +47,7 @@ $items = [1, 2, 3];       // Inferred as `array<int>` (list shorthand for `array
 ```
 
 :::note
-Type inference only works on the first assignment. If a variable has no type annotation and no initializer, the compiler reports an error requiring either an explicit type or an initial value.
+Type inference only works on the first assignment. If a variable has no type annotation and no initializer, the compiler reports an error requiring either an explicit type or an initial value. A typed declaration may omit the initializer (`string $name;`). Reading it before an assignment is TYHP4014.
 :::
 
 ## 2. Explicit Type Declaration
@@ -57,8 +57,8 @@ Write a type before the variable name when there is no initializer, or when you 
 ```tyhp
 <?tyhp
 
-// Declare a typed variable without assigning a value
-// The variable exists but is unset -- using it before assignment is an error
+// Declare a typed variable without assigning a value.
+// Reading it before assignment is TYHP4014.
 bool $myBool;
 
 // Assign a value to the typed variable
@@ -147,7 +147,18 @@ $double = fn (int $n): int => $n * 2;
 
 ## Type Immutability
 
-Once a variable is typed -- whether explicitly declared or inferred -- its type is immutable. You cannot assign a value of an incompatible type, and you cannot re-declare a variable with a different type in the same scope. `unset($x)` does not let you redeclare `$x` with a new type.
+Once a variable is typed -- whether explicitly declared or inferred -- its type is immutable. You cannot assign a value of an incompatible type, and you cannot re-declare a variable with a different type in the same scope.
+
+`unset` of a local is an error (TYHP4158). To drop the value, declare the local nullable and assign null:
+
+```tyhp
+<?tyhp
+
+?string $name = 'Ada';
+$name = null;
+```
+
+`unset($items[$i])` still removes an array element.
 
 ```tyhp
 <?tyhp
@@ -241,7 +252,7 @@ Don't assign a value of an incompatible type to a typed variable. Once a variabl
 :::
 
 :::danger
-Don't try to re-declare a variable's type in the same scope. Duplicate type declarations produce a `BinderDuplicateSymbolDeclaration` error. `unset()` does not start a new typed declaration.
+Don't try to re-declare a variable's type in the same scope. Duplicate type declarations produce a `BinderDuplicateSymbolDeclaration` error. `unset` of the variable is TYHP4158.
 :::
 
 :::danger

@@ -50,7 +50,7 @@ type UserProfile = struct {
 
 ## Property Types and Defaults
 
-Every struct property must have an explicit type annotation. Type inference is not allowed in struct property declarations. Properties without an initializer (`=`) are **required** — there are no implicit zeros for non-nullable fields. Omitting a required property is **TYHP4159**. Nullable properties without an explicit default default to `null` and are optional.
+Every struct property must have an explicit type annotation. Type inference is not allowed in struct property declarations. Properties without an initializer (`=`) are **required** — there are no implicit zeros for non-nullable fields. Omitting a required property is **TYHP4159**. Nullable properties without an explicit default default to `null` and are optional. `unset($profile->bio)` removes an optional field. A struct is an array, so that `unset` stays legal. `unset` of a class property or a local is TYHP4158.
 
 ```tyhp
 <?tyhp

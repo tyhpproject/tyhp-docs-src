@@ -71,7 +71,7 @@ final class ImmutableConfig {
 
 Properties are declared with visibility modifiers and types. Only public and protected properties should be declared — private properties are not accessible from Tyhp code.
 
-Optional `?? <value>` after the name is the expected PHP start value (`protected ?\Psr\Log\LoggerInterface $logger ?? null;`, `private array $items ?? [];`). Tyhpdef does not assign the property; the live value may differ. Do not write `= <value>` on tyhpdef properties (or on tyhpdef consts). Parameter defaults still use `=`.
+Optional `?? <value>` after the name is the expected PHP start value (`protected ?\Psr\Log\LoggerInterface $logger ?? null;`, `private array $items ?? [];`). Tyhpdef does not assign the property; the live value may differ. Do not write `= <value>` on tyhpdef properties (or on tyhpdef consts). Parameter defaults still use `=`. A static property may omit `??` when the PHP property has no default (`public static string $name;`). In a `.tyhp` file that declaration needs an initializer (TYHP4418).
 
 When a PHP constructor promotes a parameter, declare the **property** with `??` and keep `=` on the **parameter**:
 

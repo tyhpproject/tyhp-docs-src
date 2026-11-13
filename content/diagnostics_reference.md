@@ -1598,15 +1598,17 @@ PHP throws "Typed property must not be accessed before initialization" when a ty
 
 Prefer declaring the property as nullable with an explicit null default (`?T $prop = null`) when the code does not need to distinguish "no value" from "value is null". Otherwise assign it in the constructor on all paths, or guard the read with `??` / `isset` (which do not throw on uninitialized typed properties).
 
-Assignment via a helper method called from the constructor does not count — only a direct `$this->prop = …` in the constructor body (or a declaration-level initializer / promoted parameter) is a guaranteed source.
+Assignment via a helper method called from the constructor does not count — only a direct `$this->prop = …` in the constructor body (or a declaration-level initializer / promoted parameter of a constructor that runs) is a guaranteed source.
+
+A declaration initializer is applied when the object is created, including when a subclass replaces the constructor. A promoted parameter is written only when the constructor that declares it runs. A subclass that declares `__construct` does not run the parent constructor unless `parent::__construct(…)` runs on every path that reaches the end of the subclass constructor.
 :::
 
 :::member[TYHP4158 (Error)]
-**CheckerUnsetTypedPropertyWithoutAllowUnset.** Message: <code>Cannot `unset` typed property `${0}` without `#[\Tyhp\AllowUnset]`; prefer `?T ${0} = null`, or add the attribute when distinguishing uninitialized from null is required</code>.
+**CheckerUnsetStorageSlot.** Message: <code>Cannot `unset` `{0}`; assign `null` on a nullable declaration to drop the value</code>.
 
-PHP's unset() on a typed property returns the slot to the uninitialized state, which defeats property-initialization analysis.
+`unset` on a local variable, a typed instance property, or a static property returns that slot to the uninitialized state.
 
-Prefer declaring the property as nullable with an explicit null default (`?T $prop = null`) when "no value" and null are the same. Only opt in with `#[\Tyhp\AllowUnset]` when code genuinely needs the uninitialized state; then every unguarded read may report TYHP4157, and unset itself clears definite-initialization within the method.
+Declare the slot nullable and assign null (`?string $name = null`) to drop the value. Unsetting an array element (`unset($items[$i])`, `unset($obj->items[$key])`) is allowed.
 :::
 
 :::member[TYHP4159 (Error)]
@@ -2791,6 +2793,24 @@ Spread copies PHP array keys as they are. A field alias (`'status_code' as $stat
 **CheckerStructInitializerFollowedByWith.** Message: <code>A struct initializer cannot be followed by `with`; put every entry in `new {0}[...]`</code>.
 
 A bracket initializer is already the struct's entry list. A following `with` would start a second list on that result. Put every entry inside the brackets: `new Name[name => 'a', retries => 5]`.
+:::
+
+:::member[TYHP4418 (Error)]
+**CheckerStaticPropertyRequiresInitializer.** Message: <code>Typed static property `{0}` must have an initializer</code>.
+
+A typed static property is initialized when its declaring type is loaded, so the declaration requires an initializer. Write a value on the property (`public static string $name = ''`). When the property may hold no value, declare it nullable and initialize it to null (`public static ?string $name = null`).
+
+A static property declared on a trait follows the same rule.
+:::
+
+:::member[TYHP4419 (Error)]
+**CheckerPropertyNotInitializedByConstructor.** Message: <code>Typed property `${0}` on `{1}` is not initialized after construction</code>.
+
+A typed instance property must be initialized by the time construction of the class finishes. A declaration initializer counts, including when a subclass replaces `__construct`. A promoted parameter is written only when the constructor that declares it runs. A direct `$this->prop = …` in the constructor counts; an assignment in a helper called from the constructor does not.
+
+A subclass that declares `__construct` does not run the parent constructor unless `parent::__construct(…)` or `: parent(…)` runs on every path that reaches the end of the subclass constructor. A call in only one arm of an `if` / `else` does not cover the other arm, and a `return` before the call leaves the parent constructor unrun on that path. A subclass that declares no constructor runs the parent constructor.
+
+A private property of an ancestor is not assigned from the subclass. When that ancestor constructor is what initializes it, call `parent::__construct`. A property introduced by a trait follows the same rules in each class that uses the trait.
 :::
 
 :::member[TYHP4500 (Warning)]

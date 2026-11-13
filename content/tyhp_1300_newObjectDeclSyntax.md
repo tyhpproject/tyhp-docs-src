@@ -210,6 +210,51 @@ $p = new Point(1.0, 2.0);
 $q = clone $p with [z => 5.0];
 ```
 
+## Property initialization
+
+A typed property stores a value. Absence is a nullable type set to null (`?string $name = null`), or another empty value the domain uses.
+
+`unset` of a local, a typed instance property, or a static property is an error (TYHP4158). Assign `null` on a nullable declaration to drop the value. Unsetting an array element stays legal (`unset($items[$i])`, `unset($obj->items[$key])`). Unsetting an optional struct field stays legal because a struct is an array.
+
+### Static properties
+
+Every typed static property on a class, trait, or anonymous class needs an initializer (TYHP4418), including `?T` and `mixed`:
+
+```tyhp
+<?tyhp
+
+class Settings
+{
+    public static string $name = '';
+    public static ?string $cache = null;
+    public static mixed $box = null;
+}
+```
+
+A `.tyhpdef` may document a PHP static property that has no default. An interface property cannot take an initializer, an enum cannot declare a property, and a readonly class cannot declare a static property, so those declarations are not asked for one.
+
+### Instance properties
+
+After construction, every typed instance storage property is initialized (TYHP4419). Reading one that is not initialized is TYHP4157. Hooked properties are not this check. Static properties are TYHP4418.
+
+Any of these initializes a property:
+
+- A declaration initializer (`public string $name = ''`). That value is applied when the object is created, including when a subclass replaces `__construct`.
+- A promoted constructor parameter, only when the constructor that declares it runs. An inherited promoted parameter, even one with a default, does not count when a child replaces `__construct` and does not run the parent constructor.
+- A direct `$this->prop = …` in the constructor. An assignment inside a helper or a closure does not count.
+
+A subclass that declares `__construct` does not run the parent constructor unless `parent::__construct(...)` or `: parent(...)` runs on every path that reaches the end of the child constructor and on every `return` that leaves it. A call on only one arm of an `if` does not cover the other. A `throw` abandons the object. `: parent(...)` is that call before the body.
+
+A class that does not declare `__construct` runs the nearest ancestor constructor, including a constructor a trait contributes. A further descendant that also declares none runs that same constructor. A gap is reported on the class whose constructor leaves a property uninitialized.
+
+A private property of an ancestor is not assigned from the child. When skipping the parent constructor would leave that property uninitialized, TYHP4419 names it on the child constructor. A private property with a declaration initializer does not need that call.
+
+A property a trait introduces is checked on each class that uses the trait. An initializer on the trait property is a declaration guarantee.
+
+Calling a `.tyhpdef` constructor, or inheriting it by declaring none, counts as initializing that stub's typed instance properties that have no initializer. A `.tyhpdef` type whose stub chain declares no constructor has nothing to call, so a subclass that replaces `__construct` is not asked to initialize its properties.
+
+An anonymous class is named `class@anonymous` in TYHP4419.
+
 ## Property Accessors (PHP 8.4 Hooks)
 
 Tyhp supports PHP 8.4 property hooks (`get` / `set`) on class properties. Hook bodies match PHP: a parameter-less `get { ... }`, optional `set { ... }` (the incoming value is `$value`), or a typed `set(string $value) { ... }`. `&get` and `final get` / `final set` are also valid.
