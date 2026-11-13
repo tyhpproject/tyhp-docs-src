@@ -22,7 +22,7 @@ All type checking in Tyhp happens at compile time. Tyhp-only type syntax is eras
 - Type aliases — create named types for complex type expressions
 - Property accessors — computed and validated getters/setters with clean syntax
 - Disposable pattern — automatic resource cleanup with deterministic disposal via the using pattern
-- Compile-time constructs — nameof(), typeof(), and default() evaluated at compile time
+- Compile-time constructs — nameof(), typeof(), and default(). A class or enum may declare `operator default(): self` so `default(ThatType)` is an instance of that type
 - Tyhpdef files — type definition files for describing external PHP libraries, similar to TypeScript's .d.ts files
 - Parsable lambdas / expression trees — capture `fn` expressions as data for query builders and similar APIs
 

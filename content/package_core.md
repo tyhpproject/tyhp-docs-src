@@ -1170,7 +1170,7 @@ Throws `\Tyhp\Exceptions\IncompatibleTypeException` when `is()` is `false`. The 
 ### Instance methods
 
 :::member[public function defaultValue(): mixed]
-The zero value for the type, which is what `default(T)` produces: `''`, `0`, `0.0`, `false`, `[]` for `array` and `iterable`, `[]` for structs, and `null` for nullable types, objects, `void`, `never`, `mixed`, `resource`, unions, and intersections.
+The zero value for the type, which is what `default(T)` produces: `''`, `0`, `0.0`, `false`, `[]` for `array` and `iterable`, `[]` for structs, and `null` for nullable types, `void`, `never`, `mixed`, `resource`, unions, and intersections. A class, enum, or generic class type calls its own public static `__tyhpDefault()` when that exact type declares the method, and returns the result. Each call invokes the method. The result is null when the method is absent or declared only on an ancestor. Hand-written PHP may declare the method on that class. See [Compile-Time Constructs](tyhp_2700_compileTimeConstructs.md).
 :::
 
 :::member[public function asNullable(): self]

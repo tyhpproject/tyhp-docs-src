@@ -2813,6 +2813,41 @@ A subclass that declares `__construct` does not run the parent constructor unles
 A private property of an ancestor is not assigned from the subclass. When that ancestor constructor is what initializes it, call `parent::__construct`. A property introduced by a trait follows the same rules in each class that uses the trait.
 :::
 
+:::member[TYHP4420 (Error)]
+**CheckerOperatorDefaultReturnNotSelf.** Message: <code>`operator default` must return `self`, found `{0}`</code>.
+Run <code>tyhp --explain TYHP4420</code> for the long-form explanation.
+:::
+
+:::member[TYHP4421 (Error)]
+**CheckerOperatorDefaultHasParameters.** Message: <code>`operator default` takes no parameters</code>.
+Run <code>tyhp --explain TYHP4421</code> for the long-form explanation.
+:::
+
+:::member[TYHP4422 (Error)]
+**CheckerOperatorDefaultDuplicate.** Message: <code>`operator default` is already declared</code>.
+Run <code>tyhp --explain TYHP4422</code> for the long-form explanation.
+:::
+
+:::member[TYHP4423 (Error)]
+**CheckerOperatorDefaultNotAllowed.** Message: <code>`operator default` is not allowed on `{0}`</code>.
+Run <code>tyhp --explain TYHP4423</code> for the long-form explanation.
+:::
+
+:::member[TYHP4424 (Error)]
+**CheckerOperatorDefaultRecursive.** Message: <code>`operator default` evaluates `default({0})`, which calls this operator again</code>.
+Run <code>tyhp --explain TYHP4424</code> for the long-form explanation.
+:::
+
+:::member[TYHP4425 (Error)]
+**CheckerOperatorDefaultConstructorCycle.** Message: <code>`operator default` recurses through a constructor parameter default of `default({0})`</code>.
+Run <code>tyhp --explain TYHP4425</code> for the long-form explanation.
+:::
+
+:::member[TYHP4426 (Error)]
+**CheckerReservedOperatorDefaultName.** Message: <code>Method `{0}` is reserved for the `operator default` method the compiler emits</code>.
+Run <code>tyhp --explain TYHP4426</code> for the long-form explanation.
+:::
+
 :::member[TYHP4500 (Warning)]
 **CheckerDeprecatedUsage.** Message: <code>`{0}` is deprecated{1}</code>.
 

@@ -597,6 +597,8 @@ default(int);           // 0
 variable_exists($user); // true
 ```
 
+`default(Money)` is null, and that null is a constant, unless `Money` declares `operator default(): self`. With the operator, `default(Money)` has type `Money` and calls `Money::__tyhpDefault()`. Each call runs the body. The call is not a constant. A subclass does not inherit the operator.
+
 ## Use Statements and Imports
 
 All PHP `use` forms plus generic import aliases (`use Foo as Bar<int>`), `use extension` for importing extension method providers, and `global use` (compilation-wide, like C# `global using` — not PHP `global $var`). A local `use` may re-import a globally included symbol to alias or adapt it; a redundant non-mutating local `use` warns (`TYHP4169`). Unused imports are auto-pruned.
