@@ -49,6 +49,7 @@
                 "tyhp_0100_typesAndLocals.md",
                 "tyhp_0150_newTypes.md", // the decimal type, nd other new types
                 "tyhp_0151_newFunctions.md", // new functions
+                "tyhp_0152_lazyObjects.md", // lazy new and \Tyhp\Lazy
                 "tyhp_0200_typeNarrowingAndGuards.md", // typeguard functions/methods and the type guard return type
                 "tyhp_0300_includingFiles.md", // tyhp.json include globs, Composer autoload, declare(output_file); include/require are TYHP4801
                 "tyhp_0310_declarationGating.md", // if (!function_exists/class_exists) declaration gates + FQN checks
@@ -174,6 +175,56 @@
                 "package_io.md", // tyhp/io
                 "package_parallel.md", // tyhp/parallel
                 "package_compiler.md" // tyhp/compiler
+            ]
+        },
+        {
+            "icon": "fa-php",
+            "description": "PHP guides for calling a tyhp/* package without writing Tyhp.",
+            "lastUpdated": "",
+            "section": "Packages for PHP",
+            "items": [
+                "php_packages.md",
+                "php_package_core.md",
+                "php_package_async.md",
+                "php_package_decimal.md",
+                "php_package_lambda.md",
+                "php_package_io.md",
+                "php_package_parallel.md",
+                "php_package_compiler.md"
+            ]
+        },
+        {
+            "icon": "fa-database",
+            "description": "Typed database access for Laravel applications written in Tyhp.",
+            "lastUpdated": "",
+            "section": "Rhetoric",
+            "items": [
+                "rhetoric_getting_started.md",
+                "rhetoric_mapping.md",
+                "rhetoric_querying.md",
+                "rhetoric_saving.md",
+                "rhetoric_migrations.md",
+                "rhetoric_scaffolding.md",
+                "rhetoric_laravel.md",
+                "rhetoric_translation.md",
+                "rhetoric_from_ef.md"
+            ]
+        },
+        {
+            "icon": "fa-php",
+            "description": "tyhp/rhetoric for PHP developers who do not write Tyhp.",
+            "lastUpdated": "",
+            "section": "Rhetoric for PHP",
+            "items": [
+                "rhetoric_php_getting_started.md",
+                "rhetoric_php_mapping.md",
+                "rhetoric_php_querying.md",
+                "rhetoric_php_saving.md",
+                "rhetoric_php_migrations.md",
+                "rhetoric_php_scaffolding.md",
+                "rhetoric_php_laravel.md",
+                "rhetoric_php_translation.md",
+                "rhetoric_php_from_ef.md"
             ]
         },
         {

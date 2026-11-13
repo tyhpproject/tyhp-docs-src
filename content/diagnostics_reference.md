@@ -1598,23 +1598,25 @@ PHP throws "Typed property must not be accessed before initialization" when a ty
 
 Prefer declaring the property as nullable with an explicit null default (`?T $prop = null`) when the code does not need to distinguish "no value" from "value is null". Otherwise assign it in the constructor on all paths, or guard the read with `??` / `isset` (which do not throw on uninitialized typed properties).
 
-Assignment via a helper method called from the constructor does not count — only a direct `$this->prop = …` in the constructor body (or a declaration-level initializer / promoted parameter) is a guaranteed source.
+Assignment via a helper method called from the constructor does not count — only a direct `$this->prop = …` in the constructor body (or a declaration-level initializer / promoted parameter of a constructor that runs) is a guaranteed source.
+
+A declaration initializer is applied when the object is created, including when a subclass replaces the constructor. A promoted parameter is written only when the constructor that declares it runs. A subclass that declares `__construct` does not run the parent constructor unless `parent::__construct(…)` runs on every path that reaches the end of the subclass constructor.
 :::
 
 :::member[TYHP4158 (Error)]
-**CheckerUnsetTypedPropertyWithoutAllowUnset.** Message: <code>Cannot `unset` typed property `${0}` without `#[\Tyhp\AllowUnset]`; prefer `?T ${0} = null`, or add the attribute when distinguishing uninitialized from null is required</code>.
+**CheckerUnsetStorageSlot.** Message: <code>Cannot `unset` `{0}`; assign `null` on a nullable declaration to drop the value</code>.
 
-PHP's unset() on a typed property returns the slot to the uninitialized state, which defeats property-initialization analysis.
+`unset` on a local variable, a typed instance property, or a static property returns that slot to the uninitialized state.
 
-Prefer declaring the property as nullable with an explicit null default (`?T $prop = null`) when "no value" and null are the same. Only opt in with `#[\Tyhp\AllowUnset]` when code genuinely needs the uninitialized state; then every unguarded read may report TYHP4157, and unset itself clears definite-initialization within the method.
+Declare the slot nullable and assign null (`?string $name = null`) to drop the value. Unsetting an array element (`unset($items[$i])`, `unset($obj->items[$key])`) is allowed.
 :::
 
 :::member[TYHP4159 (Error)]
-**CheckerStructRequiredPropertyNotSet.** Message: <code>Required struct property `{0}` on `{1}` must be set via `new ... with [...]`</code>.
+**CheckerStructRequiredPropertyNotSet.** Message: <code>Required struct property `{0}` on `{1}` must be set via `{2}`</code>.
 
-Struct properties that are non-nullable and have no default value are required. They cannot be omitted from construction — supply them with `new StructName() with [prop => value, ...]`.
+Struct properties that are non-nullable and have no default value are required. The message names the form that was written: `new StructName[prop => value]` for a bracket initializer, `new StructName() with [prop => value]` for `with`, and either form for a bare `new StructName()`.
 
-Nullable properties (and properties with defaults) remain optional at construction.
+Nullable properties and properties with defaults stay optional.
 :::
 
 :::member[TYHP4160 (Error)]
@@ -2698,6 +2700,152 @@ function make(): Color {
 Below PHP 8.5, `clone … with` on a readonly property is lowered to a subclass that applies the new values from `__clone()`. A `readonly class` can only be extended by another readonly class, and that subclass cannot store the override list (a readonly class cannot declare a static property or a mutable one). PHP 8.5 `clone($obj, […])` does not need the subclass.
 
 Raise `output.phpVersion` to 8.5. `new … with` on the same class is available from PHP 8.3.
+:::
+
+:::member[TYHP4402 (Error)]
+**CheckerLazyNewNotCapable.** Message: <code>`lazy new` cannot construct `{0}`</code>.
+
+A `lazy new` expression creates a lazy ghost that initializes in place and keeps its identity. Internal classes other than `\stdClass`, a class that extends an internal class other than `\stdClass`, and a struct, interface, enum, trait, or other non-class cannot be constructed that way.
+:::
+
+:::member[TYHP4403 (Warning)]
+**CheckerLazyNewHasNoLazyProperty.** Message: <code>`{0}` has no lazy-capable instance property, so `lazy new` runs the constructor immediately</code>.
+
+A lazy ghost stays uninitialized only when the class stores at least one instance property. A generic class that Tyhp tracks at runtime stores its type-argument bag, so it counts. Static properties and virtual properties do not. For a class with none, PHP returns a normal object and never calls the initializer, so Tyhp emits an ordinary `new` and the constructor runs immediately. The expression is still valid.
+:::
+
+:::member[TYHP4404 (Error)]
+**CheckerGenericOnMagicMethod.** Message: <code>Magic method `{0}` cannot declare type parameters</code>.
+
+PHP dispatches a magic method by its declared name and signature. A type parameter would replace that method with a binder that returns a closure, so the engine would no longer call it.
+:::
+
+:::member[TYHP4405 (Error)]
+**CheckerGenericOverridesNonGenericMethod.** Message: <code>`{0}` cannot declare type parameters because `{1}` is not generic</code>.
+
+A non-erased generic method is emitted as a binder that takes type arguments and returns a closure. That shape cannot override or implement a method PHP calls with the original value signature.
+:::
+
+:::member[TYHP4406 (Error)]
+**CheckerGenericClassReservedMemberName.** Message: <code>`{0}::{1}` is reserved because `{2}` is a generic class</code>.
+
+A generic class generates `new()` and `type()`. A method with either name on that class, or on an ancestor, collides with the generated method.
+:::
+
+:::member[TYHP4407 (Error)]
+**CheckerInferGenericNotInferable.** Message: <code>Type parameter `{0}` on `#[\Tyhp\InferGeneric]` cannot be inferred from the arguments</code>.
+
+Every type parameter on an `#[\Tyhp\InferGeneric]` function or method has to be reachable from an argument: a callable return, a class-string, a value of that type, a `Promise` of that type, or an array or variadic list of such promises. A type that appears only in the return type has no argument to read.
+:::
+
+:::member[TYHP4408 (Warning)]
+**CheckerInferGenericOnNonGeneric.** Message: <code>`#[\Tyhp\InferGeneric]` is on `{0}`, which has no type parameters</code>.
+
+`#[\Tyhp\InferGeneric]` tells the compiler to infer type parameters from the arguments and to keep a value-signature method beside the companion. A declaration with no type parameters has nothing to infer.
+:::
+
+:::member[TYHP4409 (Error)]
+**CheckerWithEntryUnkeyed.** Message: <code>Entries need a property name: `name =&gt; value`</code>.
+Run <code>tyhp --explain TYHP4409</code> for the long-form explanation.
+:::
+
+:::member[TYHP4410 (Error)]
+**CheckerWithSpreadNotStruct.** Message: <code>Only a struct value can be spread into `{0}`; `{1}` is not a struct</code>.
+Run <code>tyhp --explain TYHP4410</code> for the long-form explanation.
+:::
+
+:::member[TYHP4411 (Error)]
+**CheckerWithSpreadExtraField.** Message: <code>Spread source `{1}` has field `{0}`, which `{2}` does not declare</code>.
+Run <code>tyhp --explain TYHP4411</code> for the long-form explanation.
+:::
+
+:::member[TYHP4412 (Error)]
+**CheckerStructInitializerOnNonStruct.** Message: <code>`new {0}[...]` constructs a struct, but `{0}` is a `{1}`{2}</code>.
+
+A bracket initializer constructs a struct. The name after `new` is a class, interface, enum, trait, `self` / `static` / `parent`, an object shape, or a type alias. When that name is a class that can be constructed, write `new Name() with [prop => value]`.
+:::
+
+:::member[TYHP4413 (Error)]
+**CheckerStructEntryUnkeyed.** Message: <code>Struct entries need a property name: `name =&gt; value`</code>.
+
+A struct initializer and a struct `with` list set fields by name. An entry with no key, such as `new Point[1.0, 2.0]` or `$p with [1.0]`, does not name a property. Write `name => value`.
+:::
+
+:::member[TYHP4414 (Error)]
+**CheckerStructSpreadNotStruct.** Message: <code>Only a struct value can be spread into `{0}`; `{1}` is not a struct</code>.
+
+Spreading into a struct copies that value's fields. The source has to be a named struct, a generic struct instance, or an anonymous struct. An array, `mixed`, a nullable struct, or a union has no fixed set of fields, so it cannot be spread.
+:::
+
+:::member[TYHP4415 (Error)]
+**CheckerStructSpreadExtraField.** Message: <code>Spread source `{1}` has field `{0}`, which `{2}` does not declare</code>.
+
+A spread copies every field of the source into the constructed struct. A field the target does not declare, including fields inherited through `extends`, would become an extra array key. Remove that field from the source or add it to the target.
+:::
+
+:::member[TYHP4416 (Error)]
+**CheckerStructSpreadKeyMismatch.** Message: <code>Field `{0}` maps to key `{1}` in `{2}` but key `{3}` in `{4}`; spread cannot rename keys</code>.
+
+Spread copies PHP array keys as they are. A field alias (`'status_code' as $statusCode`, or `0 as $arg1`) is that key. When the same field maps to a different key on the target, the spread cannot rename it. Use the same alias on both structs, or set the field with `name => value`.
+:::
+
+:::member[TYHP4417 (Error)]
+**CheckerStructInitializerFollowedByWith.** Message: <code>A struct initializer cannot be followed by `with`; put every entry in `new {0}[...]`</code>.
+
+A bracket initializer is already the struct's entry list. A following `with` would start a second list on that result. Put every entry inside the brackets: `new Name[name => 'a', retries => 5]`.
+:::
+
+:::member[TYHP4418 (Error)]
+**CheckerStaticPropertyRequiresInitializer.** Message: <code>Typed static property `{0}` must have an initializer</code>.
+
+A typed static property is initialized when its declaring type is loaded, so the declaration requires an initializer. Write a value on the property (`public static string $name = ''`). When the property may hold no value, declare it nullable and initialize it to null (`public static ?string $name = null`).
+
+A static property declared on a trait follows the same rule.
+:::
+
+:::member[TYHP4419 (Error)]
+**CheckerPropertyNotInitializedByConstructor.** Message: <code>Typed property `${0}` on `{1}` is not initialized after construction</code>.
+
+A typed instance property must be initialized by the time construction of the class finishes. A declaration initializer counts, including when a subclass replaces `__construct`. A promoted parameter is written only when the constructor that declares it runs. A direct `$this->prop = …` in the constructor counts; an assignment in a helper called from the constructor does not.
+
+A subclass that declares `__construct` does not run the parent constructor unless `parent::__construct(…)` or `: parent(…)` runs on every path that reaches the end of the subclass constructor. A call in only one arm of an `if` / `else` does not cover the other arm, and a `return` before the call leaves the parent constructor unrun on that path. A subclass that declares no constructor runs the parent constructor.
+
+A private property of an ancestor is not assigned from the subclass. When that ancestor constructor is what initializes it, call `parent::__construct`. A property introduced by a trait follows the same rules in each class that uses the trait.
+:::
+
+:::member[TYHP4420 (Error)]
+**CheckerOperatorDefaultReturnNotSelf.** Message: <code>`operator default` must return `self`, found `{0}`</code>.
+Run <code>tyhp --explain TYHP4420</code> for the long-form explanation.
+:::
+
+:::member[TYHP4421 (Error)]
+**CheckerOperatorDefaultHasParameters.** Message: <code>`operator default` takes no parameters</code>.
+Run <code>tyhp --explain TYHP4421</code> for the long-form explanation.
+:::
+
+:::member[TYHP4422 (Error)]
+**CheckerOperatorDefaultDuplicate.** Message: <code>`operator default` is already declared</code>.
+Run <code>tyhp --explain TYHP4422</code> for the long-form explanation.
+:::
+
+:::member[TYHP4423 (Error)]
+**CheckerOperatorDefaultNotAllowed.** Message: <code>`operator default` is not allowed on `{0}`</code>.
+Run <code>tyhp --explain TYHP4423</code> for the long-form explanation.
+:::
+
+:::member[TYHP4424 (Error)]
+**CheckerOperatorDefaultRecursive.** Message: <code>`operator default` evaluates `default({0})`, which calls this operator again</code>.
+Run <code>tyhp --explain TYHP4424</code> for the long-form explanation.
+:::
+
+:::member[TYHP4425 (Error)]
+**CheckerOperatorDefaultConstructorCycle.** Message: <code>`operator default` recurses through a constructor parameter default of `default({0})`</code>.
+Run <code>tyhp --explain TYHP4425</code> for the long-form explanation.
+:::
+
+:::member[TYHP4426 (Error)]
+**CheckerReservedOperatorDefaultName.** Message: <code>Method `{0}` is reserved for the `operator default` method the compiler emits</code>.
+Run <code>tyhp --explain TYHP4426</code> for the long-form explanation.
 :::
 
 :::member[TYHP4500 (Warning)]

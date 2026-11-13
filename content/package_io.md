@@ -29,7 +29,7 @@ The signatures on this page show what a caller receives. A method shown as retur
 | Redis | `Tyhp\Io\Redis` | `RedisClient`, `RedisOptions` | — |
 | Databases | `Tyhp\Io\Db` | `DbConnection`, `DbResult`, `DbStatement`, `DbValue`, `PostgresConnection`, `MySqlConnection`, `MySqlOptions`, `PdoConnection`, `PdoOptions` | `ext-pgsql`, `ext-mysqli`, or `ext-pdo` plus a PDO driver |
 | Blocking work | `Tyhp\Io` | `Offload`, `OffloadJob` | `tyhp/parallel` (optional) |
-| DNS | `Tyhp\Io\Dns` | `Dns` | — |
+| DNS | `Tyhp\Io\Dns` | `Dns` | `tyhp` module (optional) |
 | Errors | `Tyhp\Io\Exceptions` | `IoException` and its subclasses | — |
 
 ### How each area waits
@@ -45,7 +45,8 @@ PHP does not offer non-blocking versions of every kind of I/O, so the package us
 | `RedisClient` | A `SocketConnection` | Same as sockets |
 | `PostgresConnection` | libpq's asynchronous connect and query API | Nothing |
 | `MySqlConnection` | `MYSQLI_ASYNC` queries polled from the event loop | The connection handshake |
-| `PdoConnection`, `Dns`, `Offload` | A `tyhp/parallel` worker process when available | The whole call, when no worker is available |
+| `PdoConnection`, `Offload` | A `tyhp/parallel` worker process when available | The whole call, when no worker is available |
+| `Dns` | The `tyhp` module when it is loaded and at least `0.1.0`: the lookup runs on a thread and the event loop waits on its pipe | The lookup, when the module is missing or older and no worker is available |
 
 ## Installation
 
@@ -70,11 +71,19 @@ The package installs without any optional extension. Each component checks for t
 
 `tls://` sockets and `RedisOptions::$tls` use PHP's OpenSSL stream support.
 
+`ext-tyhp` is not required. `tyhp/io` suggests it. No Tyhp package requires it. Installing it is recommended. It improves the performance and stability of Tyhp runtime code. The loaded module name is `tyhp`. Install it with PIE, not `composer require`:
+
+```bash
+pie install tyhp/ext-tyhp
+```
+
+The runtime checks `extension_loaded('tyhp')` once per process, then `phpversion('tyhp') >= 0.1.0`. A missing or older module is ignored. There is no warning. DNS then uses `Offload`. The package's public API still behaves as specified.
+
 The package's public API uses only its own types and builtins, so you do not need any `tyhpdef/php-ext-*` package to call it. Add one only when your own code calls that extension directly, for example `tyhpdef/php-ext-pdo` to write `\PDO::ATTR_TIMEOUT` in `PdoOptions::$attributes`.
 
 ### Optional: `tyhp/parallel`
 
-`tyhp/parallel` is not required. When it is installed and `\Tyhp\Parallel::isAvailable()` returns `true`, `Offload`, `PdoConnection`, and `Dns` run their blocking work in worker processes and the event loop stays free. Without it, the same calls run in your process and block the loop until they finish. Your code does not change either way. See [With and without tyhp/parallel](#with-and-without-tyhpparallel) below.
+`tyhp/parallel` is not required. When it is installed and `\Tyhp\Parallel::isAvailable()` returns `true`, `Offload` and `PdoConnection` run their blocking work in worker processes and the event loop stays free. `Dns` uses the `tyhp` module when that module is loaded at `0.1.0` or newer, and otherwise goes through `Offload`, which uses a worker when one is available. Without a worker, `Offload`, `PdoConnection`, and a `Dns` lookup that did not use the module run in your process and block the loop until they finish. Your code does not change either way. See [With and without tyhp/parallel](#with-and-without-tyhpparallel) below.
 
 ```bash
 composer require tyhp/parallel
@@ -230,7 +239,8 @@ What cancellation does depends on the component:
 | `RedisClient::connectAsync()` | Stops connecting (commands themselves take no token) |
 | `PostgresConnection` | Sends a cancel request for the running statement, waits for the server to stop it |
 | `MySqlConnection` | Runs `KILL QUERY` on a second, short-lived connection |
-| `PdoConnection`, `Dns`, `Offload` | With a worker: stops that worker. Without: checked only before the work starts |
+| `Dns` | With the `tyhp` module: cancels the lookup. The promise rejects with `OperationCancelledException`. Without the module: same as `Offload` |
+| `PdoConnection`, `Offload` | With a worker: stops that worker. Without: checked only before the work starts |
 
 Timeouts are separate settings that reject with `Tyhp\Exceptions\TimeoutException` (which has `getTimeoutMs()`): `HttpRequest::$timeoutMs` and `$connectTimeoutMs`, `ProcessOptions::$timeoutMs`, the `$timeoutMs` argument of `Socket::connectAsync()`, `RedisOptions::$connectTimeoutMs`, and `MySqlOptions::$connectTimeoutSeconds`. For anything without its own timeout, wrap the promise in `Promise::timeout()` or pass a token from `new CancellationTokenSource($ms)`.
 
@@ -254,7 +264,7 @@ Failures are reported by rejecting the returned promise, so they are thrown wher
 
 ### With and without tyhp/parallel
 
-`Offload::runAsync()` sends work to `tyhp/parallel` when two things are true: the `Tyhp\Parallel` class exists (the package is installed) and `Parallel::isAvailable()` returns `true`. That is the case in a CLI process with `ext-pcntl` and `ext-posix`, or in any process (such as php-fpm) whose `TYHP_PARALLEL_SOCKET` environment variable names a running worker service. `Offload::usesWorkers()` reports the result. `PdoConnection` and `Dns` go through `Offload`, so they follow the same rule.
+`Offload::runAsync()` sends work to `tyhp/parallel` when two things are true: the `Tyhp\Parallel` class exists (the package is installed) and `Parallel::isAvailable()` returns `true`. That is the case in a CLI process with `ext-pcntl` and `ext-posix`, or in any process (such as php-fpm) whose `TYHP_PARALLEL_SOCKET` environment variable names a running worker service. `Offload::usesWorkers()` reports the result. `PdoConnection` goes through `Offload`, so it follows the same rule. `Dns` uses the `tyhp` module when that module is loaded at `0.1.0` or newer, and uses `Offload` when the module is missing or older.
 
 | | With workers | Without workers |
 |-|--------------|-----------------|
@@ -351,7 +361,7 @@ Sends a `GET` request, requires a 2xx status, and decodes the JSON body into the
 
 ### HttpRequest
 
-`HttpRequest` is a struct describing one request for `sendAsync()`. Build it with `new HttpRequest() with [...]` and set only the fields you need.
+`HttpRequest` is a struct describing one request for `sendAsync()`. Build it with `new HttpRequest[...]` and set only the fields you need.
 
 ```tyhp
 <?tyhp
@@ -488,7 +498,7 @@ use Tyhp\Io\Http\HttpRequest;
 use Tyhp\Io\Http\HttpResponse;
 
 async function putDocumentAsync(HttpClient $client, string $url, string $json): bool {
-    HttpRequest $request = new HttpRequest() with [
+    HttpRequest $request = new HttpRequest[
         url => $url,
         method => 'PUT',
         headers => ['Content-Type' => 'application/json'],
@@ -615,7 +625,7 @@ use Tyhp\Io\Process\ProcessResult;
 async function currentCommitAsync(string $repoDir): string {
     ProcessResult $result = await Process::mustRunAsync(
         ['git', 'rev-parse', 'HEAD'],
-        new ProcessOptions() with [cwd => $repoDir, timeoutMs => 5000]
+        new ProcessOptions[cwd => $repoDir, timeoutMs => 5000]
     );
     return \trim($result->stdout);
 }
@@ -639,7 +649,7 @@ async function prettyPrintAsync(string $json): string {
     try {
         ProcessResult $result = await Process::mustRunAsync(
             ['jq', '.'],
-            new ProcessOptions() with [input => $json, timeoutMs => 2000]
+            new ProcessOptions[input => $json, timeoutMs => 2000]
         );
         return $result->stdout;
     } catch (ProcessFailedException $e) {
@@ -1064,7 +1074,7 @@ use Tyhp\Io\Redis\RedisClient;
 use Tyhp\Io\Redis\RedisOptions;
 
 async function sessionDemoAsync(string $password): void {
-    RedisClient $redis = await RedisClient::connectAsync(new RedisOptions() with [
+    RedisClient $redis = await RedisClient::connectAsync(new RedisOptions[
         host => 'cache.internal',
         password => $password,
         database => 2,
@@ -1410,11 +1420,11 @@ final class OrderRepository {
     public async function transferAsync(int $fromAccount, int $toAccount, int $cents): void {
         try {
             array<int, DbResult> $results = await $this->db->transactionAsync([
-                new DbStatement() with [
+                new DbStatement[
                     sql => 'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND balance >= $1',
                     params => [$cents, $fromAccount],
                 ],
-                new DbStatement() with [
+                new DbStatement[
                     sql => 'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
                     params => [$cents, $toAccount],
                 ],
@@ -1475,7 +1485,7 @@ use Tyhp\Io\Db\PdoConnection;
 use Tyhp\Io\Db\PdoOptions;
 
 async function addProductAsync(string $name, float $price): ?string {
-    MySqlConnection $db = await MySqlConnection::connectAsync(new MySqlOptions() with [
+    MySqlConnection $db = await MySqlConnection::connectAsync(new MySqlOptions[
         host => 'db.internal',
         user => 'shop',
         password => 'secret',
@@ -1493,7 +1503,7 @@ async function addProductAsync(string $name, float $price): ?string {
 }
 
 async function recordVisitAsync(string $path): void {
-    PdoConnection $db = new PdoConnection(new PdoOptions() with [dsn => 'sqlite:/var/lib/app/stats.sqlite']);
+    PdoConnection $db = new PdoConnection(new PdoOptions[dsn => 'sqlite:/var/lib/app/stats.sqlite']);
     await $db->queryAsync('CREATE TABLE IF NOT EXISTS visits (path TEXT, at INTEGER)');
     await $db->queryAsync('INSERT INTO visits (path, at) VALUES (?, ?)', [$path, \time()]);
 }
@@ -1572,11 +1582,13 @@ async function hashPasswordAsync(string $password): string {
 ### Dns
 
 :::member[static Dns::resolveAsync(string $host, ?CancellationToken $token = null): Promise<array<int, string>>]
-Resolves `$host` through the system resolver, run with `Offload`. Resolves with its IPv4 addresses (including `/etc/hosts` entries) followed by any IPv6 addresses from DNS, without duplicates. An IP address resolves to itself.
+Resolves `$host` through the system resolver. Resolves with its IPv4 addresses (including `/etc/hosts` entries) followed by any IPv6 addresses from DNS, without duplicates. An IP address resolves to itself.
 
-**Rejects with** `IoException` when nothing resolves and the lookup runs in this process. When `Offload` runs the lookup in a worker (see `Offload::usesWorkers()`), every failure, including nothing resolving, rejects with `ParallelException`; `getRemoteClass()` names `IoException` for that case.
+When the `tyhp` module is loaded and `phpversion('tyhp')` is at least `0.1.0`, the lookup runs on a thread and the event loop waits on its pipe. The check runs once per process. A missing or older module is ignored, with no warning, and the lookup runs through `Offload`.
 
-Without `tyhp/parallel` workers, the lookup blocks the event loop like any other blocking resolver call.
+**Rejects with** `IoException` and the message `Could not resolve host {host}.` when nothing resolves and `Offload::usesWorkers()` is false. When `Offload::usesWorkers()` is true, nothing resolving rejects with `ParallelException` whose `getRemoteClass()` is `IoException`, on both paths. The `Offload` message may also name the worker file and line. A cancelled token rejects with `OperationCancelledException`.
+
+Without the module and without `tyhp/parallel` workers, the lookup blocks the event loop.
 :::
 
 ```tyhp
@@ -1612,7 +1624,7 @@ Catch `IoException` to handle any failure from this package in one place. Rememb
 ### IoException
 
 :::member[class IoException extends \RuntimeException]
-Base class for failures reported by `tyhp/io`. Thrown directly for file errors, socket errors, a command that cannot start, a failed DNS lookup, and an offloaded result of the wrong type.
+Base class for failures reported by `tyhp/io`. Thrown directly for file errors, socket errors, a command that cannot start, a failed DNS lookup when `Offload::usesWorkers()` is false, and an offloaded result of the wrong type. When `Offload::usesWorkers()` is true, an unresolved DNS host rejects with `ParallelException` whose `getRemoteClass()` is `IoException`.
 :::
 
 :::member[IoException::__construct(string $message, int $code = 0, ?\Throwable $previous = null)]
@@ -1719,16 +1731,16 @@ type LinkStatus = struct {
 };
 
 async function checkLinkAsync(HttpClient $client, string $url, CancellationToken $token): LinkStatus {
-    HttpRequest $request = new HttpRequest() with [url => $url, method => 'HEAD', timeoutMs => 10_000];
+    HttpRequest $request = new HttpRequest[url => $url, method => 'HEAD', timeoutMs => 10_000];
     try {
         HttpResponse $response = await $client->sendAsync($request, $token);
-        return new LinkStatus() with [url => $url, status => $response->status];
+        return new LinkStatus[url => $url, status => $response->status];
     } catch (TimeoutException $e) {
-        return new LinkStatus() with [url => $url, error => 'timed out'];
+        return new LinkStatus[url => $url, error => 'timed out'];
     } catch (HttpException $e) {
-        return new LinkStatus() with [url => $url, error => $e->getMessage()];
+        return new LinkStatus[url => $url, error => $e->getMessage()];
     } catch (\InvalidArgumentException $e) {
-        return new LinkStatus() with [url => $url, error => 'not an http(s) URL'];
+        return new LinkStatus[url => $url, error => 'not an http(s) URL'];
     }
 }
 
@@ -1839,7 +1851,7 @@ use Tyhp\Io\Process\ProcessResult;
 use Tyhp\Promise;
 
 async function deployAsync(string $repoDir, string $healthUrl): int {
-    ProcessOptions $inRepo = new ProcessOptions() with [cwd => $repoDir, timeoutMs => 300_000];
+    ProcessOptions $inRepo = new ProcessOptions[cwd => $repoDir, timeoutMs => 300_000];
     try {
         await Process::mustRunAsync(['git', 'pull', '--ff-only'], $inRepo);
 
@@ -1889,12 +1901,12 @@ Only `connectAsync()` takes a timeout and a token. To give a command a deadline,
 Do not split a transaction across `queryAsync()` calls (`BEGIN`, statements, `COMMIT`) or rely on session state between calls. Use `transactionAsync()`. Connections are cached per DSN, user name, and password, so two `PdoConnection` objects with the same values share a connection, and the `attributes` of the first one to connect apply.
 :::
 
-:::warning Without `tyhp/parallel`, PDO, DNS, and `Offload` block
-They still work, but the event loop waits for each call. In a server that handles many requests in one process, install `tyhp/parallel` or prefer `PostgresConnection` / `MySqlConnection`, which do not need workers.
+:::warning Without `tyhp/parallel`, PDO and `Offload` block. DNS also blocks unless the `tyhp` module is in use
+They still work, but the event loop waits for each call. In a server that handles many requests in one process, install `tyhp/parallel` for PDO and `Offload`, and install the `tyhp` module for DNS (`pie install tyhp/ext-tyhp`). `PostgresConnection` and `MySqlConnection` do not need workers.
 :::
 
 :::warning Fork the worker pool before opening connections
-In a CLI program, the `tyhp/parallel` pool is forked from your process the first time `Offload`, `PdoConnection`, or `Dns` needs a worker. Call `\Tyhp\Parallel::start()` at startup, before opening database, Redis, or socket connections, so the workers do not inherit them.
+In a CLI program, the `tyhp/parallel` pool is forked from your process the first time `Offload` or `PdoConnection` needs a worker, and the first time a `Dns` lookup goes to a worker because the `tyhp` module is not in use. Call `\Tyhp\Parallel::start()` at startup, before opening database, Redis, or socket connections, so the workers do not inherit them.
 :::
 
 :::warning HTTP error statuses resolve
@@ -1928,3 +1940,4 @@ Create one `HttpClient` per API and one `RedisClient` per Redis server for your 
 - [Disposables](tyhp_2300_disposables.md) — the `:=` operator used with `CancellationTokenSource`.
 - [Composer Runtime Packages](project_composerPackages.md) — how `tyhp/*` package versions are published and pinned.
 - [Runtime packages overview](package_intro.md) — every `tyhp/*` package at a glance.
+- [tyhp/io for PHP](php_package_io.md) — calling this package from PHP

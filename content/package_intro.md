@@ -16,6 +16,7 @@ Each package has its own page with a full API reference, explanations, and worke
 | [`tyhp/lambda`](package_lambda.md) | `Tyhp\` | Expression trees and `PropertyPath` for parsable lambdas. | Reported by `tyhp build` when compiled code uses parsable lambdas |
 | [`tyhp/io`](package_io.md) | `Tyhp\Io\` | Non-blocking HTTP, processes, files, sockets, Redis, PostgreSQL, MySQL, and PDO on the `tyhp/async` event loop. | By you |
 | [`tyhp/parallel`](package_parallel.md) | `Tyhp\` | A process pool that runs CPU-heavy or blocking tasks in worker processes, from the CLI or from php-fpm. | By you |
+| [`tyhp/rhetoric`](rhetoric_getting_started.md) | `Tyhp\Rhetoric\` | Laravel database access: models, a unit-of-work context, typed queries, migrations, and scaffolding. PHP 8.3–8.5. [PHP guide](rhetoric_php_getting_started.md). | By you |
 | [`tyhp/compiler`](package_compiler.md) | — | `vendor/bin/tyhp`, which installs and runs the native Tyhp compiler for your project. | In `require-dev`: by `tyhp init` and `tyhp composer sync` (an exact version) and by the `tyhp/core` Composer plugin (`@dev`) |
 
 The `tyhpdef/*` packages (`tyhpdef/php`, `tyhpdef/php-ext-*`, and the wrappers for popular Composer libraries) are a different kind of package: compile-time type definitions with no runtime code. They are covered in [Composer Runtime Packages](project_composerPackages.md).
@@ -29,10 +30,11 @@ tyhp/core
 │   └── tyhp/parallel
 ├── tyhp/decimal
 ├── tyhp/lambda
+│   └── tyhp/rhetoric  (Laravel illuminate/database)
 └── tyhp/compiler      (require-dev)
 ```
 
-Requiring a package pulls in the packages above it. For example, `composer require tyhp/io` also installs `tyhp/async` and `tyhp/core`. `tyhp/io` works without `tyhp/parallel`. When `tyhp/parallel` is installed and a pool is available, io moves its blocking work into worker processes: PDO queries, DNS lookups, and `Offload` jobs. See [Offloading blocking work](package_io.md#offloading-blocking-work-tyhpio).
+Requiring a package pulls in the packages above it. For example, `composer require tyhp/io` also installs `tyhp/async` and `tyhp/core`. `tyhp/io` works without `tyhp/parallel`. When `tyhp/parallel` is installed and a pool is available, io moves its blocking work into worker processes: PDO queries and `Offload` jobs, and DNS lookups when the optional `tyhp` PHP module is not in use. See [Offloading blocking work](package_io.md#offloading-blocking-work-tyhpio).
 
 ## PHP extensions
 
@@ -44,6 +46,7 @@ Requiring a package pulls in the packages above it. For example, `composer requi
 | `tyhp/lambda` | — | — |
 | `tyhp/io` | — | `ext-curl` for `HttpClient`, `ext-pgsql` for `PostgresConnection`, `ext-mysqli` for `MySqlConnection`, `ext-pdo` for `PdoConnection` |
 | `tyhp/parallel` | `ext-pcntl`, `ext-posix` | — |
+| `tyhp/rhetoric` | PHP 8.3–8.5, Laravel 13 (`illuminate/database`, `illuminate/support`, `illuminate/console`) | — |
 | `tyhp/compiler` | `ext-curl` | — |
 
 `tyhp/io` checks for an extension only when you use the class that needs it. A missing extension throws `\Tyhp\Io\Exceptions\IoUnavailableException` with the extension's name.
@@ -55,9 +58,10 @@ Compiled `tyhp/*` packages are versioned once per PHP target. The version starts
 ```bash
 composer require tyhp/io:804.0.*
 composer require tyhp/parallel:804.0.*
+composer require tyhp/rhetoric:804.0.*
 ```
 
-`tyhp init` adds `tyhp/core` and `tyhp/compiler`, plus `tyhpdef/php` in `require-dev`. After each build, `tyhp build` prints the runtime packages your compiled code needs (`tyhp/core`, `tyhp/async`, `tyhp/decimal`, `tyhp/lambda`, and `tyhpdef/php`). When [`build.updateComposer`](project_optionsList.md) is `true`, it also writes them into the `composer.json` in `output.publishPath` and runs `composer install` there; otherwise require them yourself. `tyhp/io` and `tyhp/parallel` are never added for you. Libraries that support several PHP versions OR the prefixes together. [Composer Runtime Packages](project_composerPackages.md) explains the version scheme in full.
+`tyhp init` adds `tyhp/core` and `tyhp/compiler`, plus `tyhpdef/php` in `require-dev`. After each build, `tyhp build` prints the runtime packages your compiled code needs (`tyhp/core`, `tyhp/async`, `tyhp/decimal`, `tyhp/lambda`, and `tyhpdef/php`). When [`build.updateComposer`](project_optionsList.md) is `true`, it also writes them into the `composer.json` in `output.publishPath` and runs `composer install` there; otherwise require them yourself. `tyhp/io` and `tyhp/parallel` are never added for you. `tyhp/rhetoric` is not added for you either: require it when the application uses it. It is built for PHP 8.3, 8.4, and 8.5 (`803`–`805`). Libraries that support several PHP versions OR the prefixes together. [Composer Runtime Packages](project_composerPackages.md) explains the version scheme in full.
 
 ## Async method names
 
@@ -89,3 +93,4 @@ async function backup(string $url, string $path): void {
 - [Parsable Lambdas](tyhp_3000_parsableLambdas.md) — the language feature that `tyhp/lambda` implements.
 - [Composer Runtime Packages](project_composerPackages.md) — versioning, ambient tyhpdefs, and the `tyhp/core` Composer plugin.
 - [CLI: Composer](cli_composer.md) — `tyhp composer` and `tyhp composer sync`.
+- [Packages for PHP](php_packages.md) — the same packages for PHP callers who do not write Tyhp.

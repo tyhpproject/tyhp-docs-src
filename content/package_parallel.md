@@ -835,9 +835,9 @@ final class ColumnStatsTask implements ParallelTask<ColumnStats> {
         }
 
         if ($count === 0) {
-            return new ColumnStats();
+            return new ColumnStats[];
         }
-        return new ColumnStats() with [
+        return new ColumnStats[
             count => $count,
             min => $min,
             max => $max,
@@ -967,7 +967,7 @@ Both packages let other work continue while something slow happens. They solve d
 |----------------------------|-----|
 | It waits on HTTP, Redis, PostgreSQL, MySQL, sockets, files, or child processes | [tyhp/io](package_io.md). Its clients wait without blocking, inside your process, with no serialization and no extra processes. |
 | It keeps a CPU busy (hashing, compression, parsing, rendering, math) | `tyhp/parallel`. Only a separate process can use another core. |
-| It calls a blocking library that has no async version | `tyhp/io`'s `Offload` (which runs the job in a `tyhp/parallel` worker when `Parallel::isAvailable()` is true and inline otherwise), or a `ParallelTask` of your own. `tyhp/io`'s `PdoConnection` and `Dns` work the same way. |
+| It calls a blocking library that has no async version | `tyhp/io`'s `Offload` (which runs the job in a `tyhp/parallel` worker when `Parallel::isAvailable()` is true and inline otherwise), or a `ParallelTask` of your own. `tyhp/io`'s `PdoConnection` works the same way, and so does `Dns` when the `tyhp` PHP module is not in use. |
 
 Every task pays for serialization, a trip over a socket, and unserialization in each direction. Give each task enough work to make that worthwhile (a chunk of rows or a range of numbers rather than a single item), and keep inputs and results small.
 
@@ -996,3 +996,4 @@ Every task pays for serialization, a trip over a socket, and unserialization in 
 - [Structs](tyhp_0400_structs.md) — struct results such as `ParallelRemoteError`
 - [Disposables](tyhp_2300_disposables.md) — `:=` for `CancellationTokenSource`
 - [Including Files](tyhp_0300_includingFiles.md) — entry points and `build.entryPointAutoloader`
+- [tyhp/parallel for PHP](php_package_parallel.md) — calling this package from PHP

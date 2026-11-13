@@ -205,7 +205,7 @@ $also = Optional(\Tyhp\Type::int());
 
 ## `default(Type)`
 
-Returns the default value for a given type at compile time. The argument must be a type expression, not a value. Each type has a well-defined default value:
+Returns the default value for a given type. The argument must be a type expression, not a value. Each type has a well-defined default value:
 
 - `default(int)` returns `0`
 - `default(float)` returns `0.0`
@@ -213,7 +213,8 @@ Returns the default value for a given type at compile time. The argument must be
 - `default(bool)` returns `false`
 - `default(array)` returns `[]`
 - `default(?T)` returns `null` for any nullable type
-- `default(ClassName)` for a non-scalar / object type returns `null`. Assigning that to a non-nullable target is a type error; use `?User $u = default(User)` (or another nullable type).
+- `default(ClassName)` is null when that class or enum does not declare `operator default()`. That null is a constant. Assigning it to a non-nullable target is a type error; use `?User $u = default(User)` (or another nullable type).
+- A class or enum may declare `operator default(): self` with no parameters. `default(ThatType)`, `default(self)`, and `default(static)` then have that type and call `ThatType::__tyhpDefault()`. Each call runs the body. The call is not a constant, so it cannot be a property initializer or a parameter default. A subclass does not inherit the operator. See [Compile-Time Constructs](tyhp_2700_compileTimeConstructs.md) and [Operator Overloads](tyhp_1600_operatorOverloads.md#operator-default).
 
 ```tyhp
 <?tyhp
@@ -223,8 +224,14 @@ string $text = default(string);   // ""
 bool $flag = default(bool);       // false
 array $items = default(array);    // []
 ?string $opt = default(?string);  // null
-?User $user = default(User);      // null — non-scalars default to null
+?User $user = default(User);      // null — User does not declare operator default()
 // User $bad = default(User);     // ERROR: null is not assignable to non-nullable User
+
+class Money {
+    public function __construct(public readonly int $amount = 0) {}
+    operator default(): self { return new self(0); }
+}
+Money $zero = default(Money);    // Money(0), via Money::__tyhpDefault()
 ```
 
 Compiles to:
@@ -239,7 +246,10 @@ $flag = false;
 $items = [];
 $opt = null;
 $user = null;
+$zero = \Money::__tyhpDefault();
 ```
+
+`Money` is emitted with `public static function __tyhpDefault(): static`.
 
 ## `variable_exists(expr)`
 

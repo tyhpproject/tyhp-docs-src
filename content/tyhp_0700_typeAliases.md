@@ -199,7 +199,7 @@ Inline `callable(T $x): U` is also legal in every type position. Object shapes s
 
 ## Struct-shape aliases
 
-A `type` alias whose right-hand side is `struct { … }` is a named struct. `new Point() with […]` constructs the array. Inline `struct { … }` is legal in type position.
+A `type` alias whose right-hand side is `struct { … }` is a named struct. `new Point[x => 1.0, y => 2.0]` constructs the array. A bracket initializer names the struct declaration itself. `type P2 = Point` can be used as a type, such as `P2 $p`, but `new P2[…]` is **TYHP4412**; construct the value with `new Point[…]`. Inline `struct { … }` is legal in type position.
 
 ```tyhp
 <?tyhp
@@ -209,7 +209,7 @@ type Point = struct {
     float $y;
 };
 
-Point $p = new Point() with [x => 1.0, y => 2.0];
+Point $p = new Point[x => 1.0, y => 2.0];
 ```
 
 See [Structs](tyhp_0400_structs.md) and [Object Shapes and `__New<T>`](tyhp_3400_newTypeConstraint.md).

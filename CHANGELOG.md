@@ -4,6 +4,36 @@ Notable changes to the Tyhp documentation published at [tyhplang.com](https://ty
 
 ## [Unreleased]
 
+### Added
+
+- Packages for PHP: an index and one page each for `tyhp/core`, `tyhp/async`, `tyhp/decimal`, `tyhp/lambda`, `tyhp/io`, `tyhp/parallel`, and `tyhp/compiler`, for PHP callers. Samples use `T::int`, types-first calls such as `Json::decode(T::struct([...]))($json)` and `Promise::allSettled()($promises)`, and plain calls such as `await(async(...))` and `\_expr`.
+- Lazy Objects: `lazy new`, `\Tyhp\Lazy`, and `Generic::bind()->ghost()` when the class or its type arguments are chosen at runtime. Disposables, Generics, the tyhp/core page, and the Quick Reference point at that page, including that an uninitialized lazy object is not disposed.
+- Rhetoric: getting started, mapping, querying, saving, migrations, scaffolding, Laravel integration, the translation reference, and coming from EF Core.
+- Rhetoric for PHP: the same topics for callers who do not write Tyhp (`rhetoric_php_getting_started.md` and the other `rhetoric_php_*.md` pages). Runtime Packages Overview and Composer Runtime Packages list `tyhp/rhetoric`.
+
+### Changed
+
+- What is Tyhp?, Compile-Time Constructs, Operator Overloads, New and Changed Functions, the tyhp/core package page, the Quick Reference, and the Roadmap: a class or enum may declare `operator default(): self`. `default(ThatType)` then has that type and calls `ThatType::__tyhpDefault()`. A class or enum that does not declare the operator, including a subclass, still produces null. The Roadmap marks that operator implemented. Diagnostic Code Reference: TYHP4420–TYHP4426.
+- Types and Locals, New Object Declaration Syntax, Structs, Type Narrowing and Guards, Classes in Tyhpdef, CLI: Tyhpdef Generation, the tyhp/core package page, and the Roadmap: `unset` of a local, a typed instance property, or a static property is TYHP4158. Drop a value with `?T = null`. A typed static property needs an initializer (TYHP4418). After construction, every typed instance storage property is initialized (TYHP4419), and a class that declares no constructor runs the nearest ancestor constructor. Array-offset `unset` and unsetting an optional struct field stay legal. `#[\Tyhp\AllowUnset]` is no longer part of `tyhp/core`. A `.tyhpdef` may still document a PHP static property with no default.
+- Diagnostic Code Reference: TYHP4158, TYHP4418, and TYHP4419. TYHP4157 remains the read of a property that construction did not initialize.
+- Structs, the with keyword, type aliases, the Quick Reference, the syntax FAQ, and struct examples on the tyhp/core, tyhp/io, and tyhp/parallel pages: a struct is constructed with `new Name[prop => value]`, including generic and anonymous structs and spreading another struct.
+- Diagnostic Code Reference: TYHP4412–TYHP4417, and TYHP4159 names the construction form that was written.
+- Parsable Lambdas, the tyhp/lambda package, tyhp/lambda for PHP, the interop contract, tyhp/core for PHP, the tyhp/io package, tyhp/io for PHP, Runtime Packages Overview, the tyhp/parallel package, and Extensions: the optional `tyhp` module (`pie install tyhp/ext-tyhp`) is recommended and never required. PHP packages build expression trees with the fluent API, and PHP that knows the module is loaded may pass a closure. DNS uses the module when it is loaded and goes through `Offload` otherwise.
+- Packages for PHP, tyhp/core for PHP, the tyhp/core package page, and Rhetoric for PHP getting started: `_gnrc` takes the same type arguments as `Generic::bind`, including `T::int`.
+- Rhetoric for PHP: samples call `table(Post::class)()`, `model(Post::class)()`, `belongsTo(Blog::class)($path)`, `ContextFactory::new(Context::class)()`, `EloquentQuery::query(Model::class)()`, `select(Post::class)($sql)`, and `transaction(T::int)($callback)`. `entry($model)` and `Expression::of` are ordinary calls (`rhetoric_php_getting_started.md`, and the mapping, querying, saving, Laravel, translation, and coming-from-EF pages).
+- Generics, tyhp/core, tyhp/async, tyhp/lambda, the Quick Reference, and the pages that show a PHP generic call: PHP uses `T::int`, `Box::new(T::int)(42)`, `Box::type(T::int)`, binder-first `name(types)(args)` (`Json::decode`, `Promise::reject()($e)`, `Promise::withResolvers(T::int)()`), and plain `#[\Tyhp\InferGeneric]` calls (`await(async(...))`, `_expr`). `Type::struct('Name', [...])` requires every key unless the field is `T::optional`. Diagnostic Code Reference regenerated, including TYHP4404–TYHP4408.
+- The tyhp/async Package: PHP waits with `\Tyhp\await($promise, $timeoutMs, $token)` or `$promise->wait($timeoutMs, $token)`. Both suspend inside a loop fiber and run the loop from synchronous PHP. `await` has no `__tyhpGeneric` companion; `async` does.
+- Diagnostic Code Reference: regenerated, including TYHP4402 and TYHP4403.
+- Compile-Time Constructs and New and Changed Types: `nameof(Type::$prop)` is `__PropertyName<Type>` and can be an attribute argument; a class reference is `Type::class` or `T::class` (`__ClassName<Type>`).
+- Parsable Lambdas and Expression Trees: an extension method call stays a `MethodCallExpression` (`$title->startsWith($prefix)`); the extension body is not part of the tree.
+- Roadmap: emitted docblocks and templates are marked shipped, and Tier 3 now lists the changes that land before the first stable release (struct initializers, no uninitialized storage, `operator default()`, scalar-conversion contracts, abstract members for trait requirements, and pre-stable compatibility changes). Future Plans is in planned order and adds glob exclusions, pipe operator output, declaration-site variance, and runtime closure and fiber checks.
+
+### Fixed
+
+- tyhp/io for PHP: the `Process` section describes `runAsync` and `mustRunAsync` as returning a promise of a `ProcessResult` array. `mustRunAsync` throws `ProcessFailedException` when `exitCode` is not 0.
+- Diagnostic Code Reference: TYHP4412 suggests `new Name() with [...]` only when that name is a class that can be constructed.
+- Packages for PHP, tyhp/async for PHP, tyhp/lambda for PHP, and Lazy Objects: those pages state the call or syntax to write.
+
 ## 2026-11-04
 
 ### Added

@@ -958,3 +958,4 @@ try {
 - [Runtime Packages Overview](package_intro.md) — all `tyhp/*` packages.
 - [The tyhp/core Package](package_core.md) — the `Convertible` contracts that `Decimal` implements.
 - [Composer Runtime Packages](project_composerPackages.md) — versioning and installation.
+- [tyhp/decimal for PHP](php_package_decimal.md) — calling this package from PHP

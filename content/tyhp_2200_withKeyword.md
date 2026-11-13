@@ -160,7 +160,7 @@ type Coordinates = struct {
     float $alt = 0.0;
 };
 
-$coords = new Coordinates() with [lat => 40.7, lng => -74.0];
+$coords = new Coordinates[lat => 40.7, lng => -74.0];
 
 // In-place with on an existing struct value
 $coords with [alt => 100.0];
@@ -254,7 +254,9 @@ $q = clone $p with [z => 5.0];
 
 ## with on Structs
 
-Structs are always PHP associative arrays, so the with keyword on structs compiles to `\array_replace` (not `\array_merge`). That rebinds the array the same way a PHP function rebinds an array parameter — it does not mutate a shared object identity. Named and anonymous struct types support the same operations: property access and writes, `with`, `clone ... with`, `isset`, `??`, and array key aliases.
+A struct is constructed with a bracket list: `new Coordinates[lat => 40.7, lng => -74.0]`. That is the same as `new Coordinates() with [lat => 40.7, lng => -74.0]`, and `new Coordinates[]` is the same as `new Coordinates()`. `clone $coords with [...]` copies a value and then updates it. `$coords with [...]` rebinds the variable you already hold.
+
+Structs are always PHP associative arrays, so `with` on a struct compiles to `\array_replace` (not `\array_merge`). That rebinds the array the same way a PHP function rebinds an array parameter — it does not mutate a shared object identity. Named, generic, and anonymous struct types support the same operations: property access and writes, `with`, `clone ... with`, `isset`, `??`, and array key aliases. With no spread, a bracket initializer emits the same array literal as `with`.
 
 ```tyhp
 <?tyhp
@@ -265,7 +267,7 @@ type Coordinates = struct {
     float $alt = 0.0;
 };
 
-$coords = new Coordinates() with [lat => 40.7, lng => -74.0];
+$coords = new Coordinates[lat => 40.7, lng => -74.0];
 $elevated = clone $coords with [alt => 100.0];
 ```
 
@@ -276,7 +278,7 @@ $coords = ['alt' => 0.0, 'lat' => 40.7, 'lng' => -74.0];
 $elevated = \array_replace($coords, ['alt' => 100.0]);
 ```
 
-An anonymous struct type behaves the same way:
+An anonymous struct type behaves the same way. The bracket list follows the closing `}`:
 
 ```tyhp
 <?tyhp
@@ -284,7 +286,7 @@ An anonymous struct type behaves the same way:
 struct { string $name; int $age; } $person = new struct {
     string $name;
     int $age;
-} with [name => 'Alice', age => 30];
+}[name => 'Alice', age => 30];
 
 $person->age = 31;
 $person with [age => 32];
@@ -299,6 +301,38 @@ $person['age'] = 31;
 $person = \array_replace($person, ['age' => 32]);
 $renamed = \array_replace($person, ['name' => 'Bob']);
 ```
+
+### Spread
+
+A spread in a struct `with` list, or in a bracket initializer, copies every field of a struct value. The source has to be a named struct, a generic struct instance, or an anonymous struct. An array, `mixed`, a nullable struct, or a union is **TYHP4414**. A field the target does not declare, including through `extends`, is **TYHP4415**. Field types must be assignable (**TYHP4008**). Array keys must match, including aliases; a spread cannot rename a key (**TYHP4416**). An entry with no key is **TYHP4413**.
+
+A required field is satisfied by a keyed entry, or by a spread whose source requires that field or gives it a default. A nullable source field without a default does not satisfy it. Later entries override earlier ones. The compiler emits `\array_replace`, which keeps integer keys.
+
+```tyhp
+<?tyhp
+
+type Opts = struct {
+    string $name;
+    int $retries = 3;
+    ?string $nick;
+};
+
+Opts $base = new Opts[name => 'ann'];
+Opts $extra = new Opts[name => 'ann', nick => 'a'];
+Opts $copy = clone $base with [...$extra, name => 'bob'];
+$base with [...$copy];
+```
+
+```php
+<?php
+
+$base = ['retries' => 3, 'name' => 'ann'];
+$extra = ['retries' => 3, 'name' => 'ann', 'nick' => 'a'];
+$copy = \array_replace($base, $extra, ['name' => 'bob']);
+$base = \array_replace($base, $copy);
+```
+
+`new Opts[name => 'a'] with [retries => 5]` is **TYHP4417**. Put every entry in the brackets: `new Opts[name => 'a', retries => 5]`. See [Structs](tyhp_0400_structs.md#spread).
 
 ## Best Practices
 
@@ -371,6 +405,9 @@ On PHP 8.3–8.4, `clone ... with` on `readonly` properties of a class that is n
 - `clone ... with` on a readonly property on PHP 8.3–8.4 without `build.experimentalReadonlyCloneWith`.
 - Readonly `new ... with` or `clone ... with` when `output.phpVersion` is below 8.3 (TYHP4400).
 - `clone ... with` on a `readonly class` when `output.phpVersion` is below 8.5 (TYHP4401).
-- Setting a non-existent property via with.
+- Setting a non-existent property via with (**TYHP4031**).
 - Setting a private or protected property via with from outside the class.
 - Applying with to an expression that is not a new expression, a clone expression, or an addressable object/struct instance.
+- An unkeyed entry in a struct `with` list (**TYHP4413**).
+- Spreading a non-struct into a struct (**TYHP4414**), a source field the target does not declare (**TYHP4415**), or a field whose array key differs (**TYHP4416**).
+- A bracket initializer followed by `with` (**TYHP4417**).

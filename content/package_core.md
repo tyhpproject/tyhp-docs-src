@@ -49,9 +49,10 @@ The first `composer require tyhp/core` often does not install the ambient type d
 | Runtime types | `\Tyhp\Type`, `\Tyhp\NamedType` | You and compiled code (`typeof`, `is`, `default`) |
 | Typed JSON | `\Tyhp\Json` | You |
 | Generics bridge | `\Tyhp\Generic` | Hand-written PHP and compiled code that calls another library's generics |
+| Lazy objects | `\Tyhp\Lazy` | You. `lazy new` is compiled; this class is the runtime helper. See [Lazy Objects](tyhp_0152_lazyObjects.md) |
 | Object `with` helper | `\Tyhp\ObjectHelper` | Compiled `with` expressions; also callable directly |
 | Contracts | `\Tyhp\Contracts\IsDisposable`, `Convertible`, `IntConvertible`, `FloatConvertible`, `BoolConvertible`, `StringConvertible`, `ArrayAccessShape<TStruct>` | You implement them |
-| Attributes | `#[\Tyhp\Php]`, `#[\Tyhp\PhpType]`, `#[\Tyhp\NativeTypeTest]`, `#[\Tyhp\EraseGeneric]`, `#[\Tyhp\AllowUnset]`, `#[\Tyhp\GenericRuntime]`, `#[\Tyhp\NoEmit]`, `#[\Tyhp\Optimize\Pure]`, `#[\Tyhp\Optimize\Inline]` | You write most of them; the compiler writes `GenericRuntime` |
+| Attributes | `#[\Tyhp\Php]`, `#[\Tyhp\PhpType]`, `#[\Tyhp\NativeTypeTest]`, `#[\Tyhp\EraseGeneric]`, `#[\Tyhp\GenericRuntime]`, `#[\Tyhp\NoEmit]`, `#[\Tyhp\Optimize\Pure]`, `#[\Tyhp\Optimize\Inline]` | You write most of them; the compiler writes `GenericRuntime` |
 | Exceptions | `\Tyhp\Exceptions\IncompatibleTypeException`, `InvalidTypeException`, `AggregateException`, `PropertyNotFoundException`, `InvalidParametersForOperatorOverloadException` | Thrown by the runtime and by compiled code |
 | Compiled-code plumbing | `PropertyAccessor`, `PropertyAccessorObject`, `PropertyBackingCell`, `GenericObject`, `\Tyhp\Concerns\*` traits | Compiled code only |
 | Composer plugin | `Tyhp\Composer\Plugin` | Composer |
@@ -981,9 +982,32 @@ function cached(): int {
 
 ## Runtime types: `\Tyhp\Type`
 
-A `\Tyhp\Type` is a runtime description of a Tyhp type. The compiler creates them for you: `typeof(T)` produces one, `$x is ?User` and other non-native guards compile to `\Tyhp\Type::is($x, …)`, `default(T)` compiles to `->defaultValue()` once `T` is known, and tracked generic classes carry the types they were constructed with. You use the class directly when you validate untrusted data, write generic infrastructure, or pass type arguments from hand-written PHP to [`\Tyhp\Generic::bind`](#generics-bridge-tyhpgeneric). See [Compile-Time Constructs](tyhp_2700_compileTimeConstructs.md) for `typeof` and `default`.
+A `\Tyhp\Type` is a runtime description of a Tyhp type. The compiler creates them for you: `typeof(T)` produces one, `$x is ?User` and other non-native guards compile to `\Tyhp\Type::is($x, …)`, `default(T)` compiles to `->defaultValue()` once `T` is known, and tracked generic classes carry the types they were constructed with. You use the class directly when you validate untrusted data, write generic infrastructure, or pass type arguments from hand-written PHP. See [Compile-Time Constructs](tyhp_2700_compileTimeConstructs.md) for `typeof` and `default`.
 
-`Type` implements `\Stringable`. Its constructor is protected; create instances with the static factories below. Scalar factories and `fromClassName()` return a shared instance per name, so `Type::int() === Type::int()`.
+`Type` implements `\Stringable` and `\Tyhp\TypeLike`. Its constructor is protected; create instances with the static factories below. Scalar factories and `fromClassName()` return a shared instance per name, so `Type::int() === Type::int()`.
+
+### Constants, `BuiltIn`, and `TypeLike`
+
+Import `use Tyhp\Type as T`. Each builtin is a class constant of type `\Tyhp\BuiltIn`: `T::string`, `T::int`, `T::float`, `T::bool`, `T::null`, `T::void`, `T::mixed`, `T::never`, `T::array`, `T::object`, `T::callable`, `T::iterable`, and `T::resource`. A constant is the enum case, so it is valid in an attribute argument and a parameter default. `T::int()` still returns a `Type`, through `Type::__callStatic`.
+
+`\Tyhp\TypeLike` is `toType()` and `or()` only. `Type` and `BuiltIn` implement it. `nullable()` is not a `TypeLike` method. `Type::nullable($type)` and `$type->nullable()` stay magic on `Type`. `BuiltIn` has real `nullable()` and `or()`, so `T::int->nullable()` and `T::int->or(T::string)` are ordinary methods and return `Type`.
+
+A class, interface, or enum name is a `string` (its class-string). A type written as text goes through `Type::parse`. Combined types:
+
+```php
+<?php
+
+use Tyhp\Type as T;
+
+T::list(T::int);
+T::map(T::string, T::int);
+T::struct(['id' => T::int, 'name' => T::optional(T::string)]);
+T::struct('App\\User', ['id' => T::int, 'name' => T::string]);
+T::generic(\Vendor\Box::class, T::int);
+\Vendor\Box::type(T::int);
+```
+
+An array passed to `T::struct` is the field map. Every field is required unless it is wrapped in `T::optional`. `T::struct('App\\User', [...])` means the same thing: every key is required unless wrapped in `T::optional`. The three-argument form `Type::struct($name, $fields, $requiredKeys)` still uses `$requiredKeys` as the required-key list, including an empty list.
 
 ```tyhp
 <?tyhp
@@ -1073,16 +1097,32 @@ A union. Nested unions are flattened and repeated members (the same instance) ar
 An intersection, flattened and de-duplicated like `union()`. Throws `InvalidTypeException` with fewer than two distinct members.
 :::
 
-:::member[public static function nullable(self $type): self]
-The nullable form of `$type`. Returns `$type` itself when it is already nullable, `null`, or `mixed`.
+:::member[public static function nullable(TypeLike|string $type): self]
+The nullable form of `$type`. Dispatched by `__callStatic`, so `Type::nullable($type)` and `$type->nullable()` share one name. Returns `$type` itself when it is already nullable, `null`, or `mixed`. `BuiltIn::nullable()` is a real method and returns the same `Type`.
 :::
 
-:::member[public static function generic(string $className, \Tyhp\NamedType ...$params): self]
-A generic application such as `Box<int>` or `array<string, int>`. Pass one `NamedType` per type parameter in declaration order. For `'array'` and `'iterable'`, one parameter is the value type and two are key then value; `is()` then checks every element. For a class, `is()` checks the instance and, when the object tracks its own type arguments, that they are compatible.
+:::member[public static function optional(TypeLike|string $type): self]
+A struct field that may be absent. Dispatched by `__callStatic`, the same way as `nullable()`. Wrap a field in a `struct()` map with it. On a struct value, `->optional($name, $type)` is the instance form and records that field as not required.
 :::
 
-:::member[public static function struct(string $name, array<int|string, self> $fields, array<int, int|string> $requiredKeys = []): self]
-A struct shape: an associative array with typed fields. `$fields` maps each key to its field type; every key in `$requiredKeys` must be present on a value. Fields that are present must match their type; missing optional fields and extra keys are ignored. `$name` is used for display only.
+:::member[public static function list(TypeLike|string $value): self]
+`array<TValue>`. Same as `listOf()`.
+:::
+
+:::member[public static function map(TypeLike|string $key, TypeLike|string $value): self]
+`array<TKey, TValue>`. Same as `mapOf()`.
+:::
+
+:::member[public static function generic(string $className, TypeLike|string ...$params): self]
+A generic application such as `Box<int>` or `array<string, int>`. Arguments are positional, named (`T: T::int`), or mixed, with named arguments after positional ones. A `NamedType` is stored as given. Names come from a layout-2 `Box::new` binder, or from a layout-1 factory's `$__generic_*` parameters. A plain PHP class has positional arguments only. For `'array'` and `'iterable'`, one parameter is the value type and two are key then value; `is()` then checks every element. For a class, `is()` checks the instance and, when the object tracks its own type arguments, that they are compatible. An unknown name, a wrong count, or a name that fills a slot already filled by position throws `\Tyhp\Exceptions\InvalidTypeException`.
+:::
+
+:::member[public static function struct(array<int|string, TypeLike|string>|string|null $name = null, array<int|string, TypeLike|string> $fields = [], ?array<int, int|string> $requiredKeys = null): self]
+A struct shape: an associative array with typed fields. An array first argument is the field map, and it takes no further arguments; pass a name as `struct(name: ..., fields: ...)`. Every field is required unless it is wrapped in `optional()`. `struct('App\\User', $fields)` means the same thing: with `$requiredKeys` omitted, every key is required unless wrapped in `optional()`. The three-argument form uses `$requiredKeys` as the required-key list, including an empty list. Fields that are present must match their type. Extra keys on a value are ignored. `$name` is used for display only.
+:::
+
+:::member[public static function arg(TypeLike|string|null $type): ?self]
+Normalizes a type argument. `null` stays `null`. A `Type` passes through. A `BuiltIn` case becomes its `Type`. A string that names a loaded class, interface, or enum becomes `fromClassName`. Any other string throws `\Tyhp\Exceptions\InvalidTypeException`.
 :::
 
 :::member[public static function objectShape(string $name, array<int, string> $methods = [], array<int, string> $properties = []): self]
@@ -1116,7 +1156,7 @@ The runtime type of a value: a scalar type, `array`, `resource`, or the object's
 :::
 
 :::member[public static function isType<TTarget>(mixed $value): $value is TTarget]
-A type guard: `Type::isType<int>($v)` narrows `$v` to `int` in Tyhp. From PHP, bind the type argument with `\Tyhp\Generic::bind(\Tyhp\Type::isType(...), \Tyhp\Type::int())($v)`.
+A type guard: `Type::isType<int>($v)` narrows `$v` to `int` in Tyhp. The type parameter is not inferred from the value, so PHP calls the binder: `\Tyhp\Type::isType(T::int)($v)`.
 :::
 
 :::member[public static function check(mixed $value, self $type): void]
@@ -1130,11 +1170,15 @@ Throws `\Tyhp\Exceptions\IncompatibleTypeException` when `is()` is `false`. The 
 ### Instance methods
 
 :::member[public function defaultValue(): mixed]
-The zero value for the type, which is what `default(T)` produces: `''`, `0`, `0.0`, `false`, `[]` for `array` and `iterable`, `[]` for structs, and `null` for nullable types, objects, `void`, `never`, `mixed`, `resource`, unions, and intersections.
+The zero value for the type, which is what `default(T)` produces: `''`, `0`, `0.0`, `false`, `[]` for `array` and `iterable`, `[]` for structs, and `null` for nullable types, `void`, `never`, `mixed`, `resource`, unions, and intersections. A class, enum, or generic class type calls its own public static `__tyhpDefault()` when that exact type declares the method, and returns the result. Each call invokes the method. The result is null when the method is absent or declared only on an ancestor. Hand-written PHP may declare the method on that class. See [Compile-Time Constructs](tyhp_2700_compileTimeConstructs.md).
 :::
 
 :::member[public function asNullable(): self]
-Same as `Type::nullable($this)`.
+Same result as `Type::nullable($this)`. `$type->nullable()` is the magic instance call.
+:::
+
+:::member[public function or(TypeLike|string ...$others): self]
+The union of this type and `$others`. A member that is the same type as an earlier one adds nothing, so `int` or `int` is `int`. `BuiltIn::or()` returns the same `Type`.
 :::
 
 :::member[public function asNonNullable(): self]
@@ -1230,7 +1274,7 @@ function loadUser(string $json): User {
 }
 
 function tryUser(string $json): ?User {
-    User $user = new User() with [id => 0, name => ''];
+    User $user = new User[id => 0, name => ''];
     if (!Json::tryDecode<User>($json, $user)) {
         return null;
     }
@@ -1248,42 +1292,42 @@ function tryUser(string $json): ?User {
 
 A struct field is required when it is neither nullable nor given a default, so `email` may be absent or `null` while `id` and `name` must be present. Keys the struct does not declare are kept in the decoded array.
 
-From hand-written PHP, bind `T` with [`\Tyhp\Generic::bind`](#generics-bridge-tyhpgeneric), passing a `Type::struct()` descriptor whose third argument lists the required keys:
+From hand-written PHP, `decode` and `tryDecode` are binders. Pass the struct type first, then call the closure with the JSON. `tryDecode`'s type parameter appears only as `T &$out`, so it is not inferred. In the two-argument `struct` form every key is required unless it is wrapped in `T::optional`:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-use Tyhp\Generic;
 use Tyhp\Json;
-use Tyhp\Type;
+use Tyhp\Type as T;
 
-$userType = Type::struct('App\\User', [
-    'id' => Type::int(),
-    'name' => Type::string(),
-    'email' => Type::nullable(Type::string()),
-], ['id', 'name']);
-
-$decodeUser = Generic::bind(Json::decode(...), $userType);
+$userType = T::struct('App\\User', [
+    'id' => T::int,
+    'name' => T::string,
+    'email' => T::optional(T::string->nullable()),
+]);
 
 try {
-    $user = $decodeUser('{"id": 7, "name": "Ada"}');
+    $user = Json::decode($userType)('{"id": 7, "name": "Ada"}');
 } catch (\Throwable $e) {
     \error_log('Could not decode user: ' . $e->getMessage());
 }
+
+$out = [];
+$ok = Json::tryDecode($userType)('{"id": 7, "name": "Ada"}', $out);
 ```
 
 ## Generics bridge: `\Tyhp\Generic`
 
-Tyhp generics are erased from PHP signatures. When a generic class or callable needs its type arguments at runtime, the compiler emits a factory or binder and stamps the declaration with [`#[\Tyhp\GenericRuntime]`](#tyhpgenericruntime). Inside one compilation, Tyhp calls those helpers directly. `\Tyhp\Generic::bind` is the stable entry point for everyone else: hand-written PHP, and Tyhp code that uses a generic from another compiled library (the compiler emits `bind` for those call sites). See [Generics](tyhp_0500_generics.md#compiled-php-output).
+Tyhp generics are erased from PHP signatures. When a generic class or callable needs its type arguments at runtime, the compiler stamps the declaration with [`#[\Tyhp\GenericRuntime]`](#tyhpgenericruntime). PHP calls a concrete generic class with `Box::new(T::int)(42)` and `Box::type(T::int)`, a non-erased method that is not `#[\Tyhp\InferGeneric]` with `name(types)(args)`, and an `#[\Tyhp\InferGeneric]` method as a plain call. Explicit type arguments on that plain method use its `name__tyhpGeneric` companion (`layouts: [1]`). `\Tyhp\Generic::bind` binds layout 1 and layout 2 for a class or callable chosen at runtime, and for an explicit binding of either layout. A Tyhp `new` of a class compiled in another library emits `bind`. A foreign layout-2 call emits `name(types)(args)` directly. See [Generics](tyhp_0500_generics.md#compiled-php-output).
 
-`final class Generic` cannot be constructed directly.
+`final class Generic` cannot be constructed directly. The root function `_gnrc` forwards to `bind`. Its type arguments are `\Tyhp\TypeLike|string|null`, the same as `bind`.
 
-:::member[public static function bind(mixed $target, ?\Tyhp\Type ...$typeArguments): mixed]
-Binds type arguments to a generic class or callable. Pass one `Type` per type parameter of the target, in declaration order. A `null` (or an omitted trailing argument) leaves that parameter unbound, and it resolves the way a missing type argument does in Tyhp: the declared default, else the constraint, else `mixed`.
+:::member[public static function bind(mixed $target, TypeLike|string|null ...$typeArguments): mixed]
+Binds type arguments to a generic class or callable. Accepts layout 1 and layout 2. Each argument is a `Type`, a `BuiltIn` case, a class-string, or `null`. `Type::arg` normalizes it. A `null` (or an omitted trailing argument) leaves that parameter unbound, and it resolves the way a missing type argument does in Tyhp: the declared default, else the constraint, else `mixed`.
 
-When `$target` is a class name, `bind` returns a `Generic` binder; nothing is constructed until you call `new(...)` or invoke the binder. When `$target` is a callable, `bind` returns a `\Closure` that takes the target's value arguments. For a static method or function, pass a first-class callable (`\Vendor\Util::first(...)`) or a `'Class::method'` / function-name string; for an instance method, pass `$object->method(...)` so the receiver is known. By-reference parameters are preserved.
+When `$target` is a class name, `bind` returns a `Generic` binder; nothing is constructed until you call `new(...)`, `ghost(...)`, or invoke the binder. When `$target` is a callable, `bind` returns a `\Closure` that takes the target's value arguments. For a static method or function, pass a first-class callable (`\Vendor\Util::first(...)`) or a `'Class::method'` / function-name string; for an instance method, pass `$object->method(...)` so the receiver is known. By-reference parameters are preserved.
 
 Throws `\Tyhp\Exceptions\InvalidTypeException` when the target is not a compiled Tyhp generic (no `GenericRuntime` stamp), was compiled with a binding layout this runtime does not support, or is an instance method bound without a receiver. Throws `\ReflectionException` when a class name cannot be loaded, and `\InvalidArgumentException` when `$target` is an anonymous closure (other than one made by `wrapCallable`) or neither a class name nor a resolvable callable.
 :::
@@ -1295,7 +1339,11 @@ Throws `\InvalidArgumentException` when `$factory` does not return a `\Closure`.
 :::
 
 :::member[public function new(mixed ...$constructorArguments): object]
-Runs the class's constructor with the bound type arguments and returns the instance. Named arguments are forwarded to the constructor by name. Each binder constructs exactly one object: a second `new()` or invocation on the same binder throws `\LogicException` ("Generic instance of 'Vendor\Box' has already been constructed."). Call `bind()` again for another instance. Prefer `new()` over invoking the binder when you want IDEs and static analyzers to infer the instance type.
+Runs the class's constructor with the bound type arguments and returns the instance. Named arguments are forwarded to the constructor by name. Each binder constructs exactly one object: a second `new()`, `ghost()`, or invocation on the same binder throws `\LogicException` ("Generic instance of 'Vendor\Box' has already been constructed."). Call `bind()` again for another instance. Prefer `new()` over invoking the binder when you want IDEs and static analyzers to infer the instance type.
+:::
+
+:::member[public function ghost(mixed ...$constructorArguments): object]
+Same constructor arguments as `new()`. On the PHP 8.4 and 8.5 builds of `tyhp/core`, returns a lazy ghost. When the class keeps its type arguments at runtime, those arguments are bound on that instance before the constructor runs, so the constructor observes them. `new()` and invoking the binder stay eager. A class PHP cannot keep lazy (no stored instance property) still has its constructor run before `ghost()` returns, as `new()` would. A class with no constructor is not given a `__construct` call, and arguments passed to it fail at the call. On the PHP 8.2 and 8.3 builds, `ghost()` does the same thing as `new()`. See [Lazy Objects](tyhp_0152_lazyObjects.md).
 :::
 
 :::member[public function __invoke(mixed ...$constructorArguments): object]
@@ -1308,14 +1356,17 @@ Same as `new()`.
 declare(strict_types=1);
 
 use Tyhp\Generic;
-use Tyhp\Type;
+use Tyhp\Type as T;
 
-// A generic class from a compiled Tyhp library: class Box<T> { public function __construct(T $value) {} }
-$intBox = Generic::bind(\Vendor\Box::class, Type::int())->new(42);
+// class Box<T> { public function __construct(T $value) {} }
+$intBox = \Vendor\Box::new(T::int)(42);
+$boxType = \Vendor\Box::type(T::int);
 
-// A generic method: public function identity<T>(T $value): T
-$identity = Generic::bind($helper->identity(...), Type::string());
-$value = $identity('hello');
+// The class name is chosen at runtime.
+$lazyBox = Generic::bind($className, T::int)->ghost(42);
+
+// Explicit types on an #[\Tyhp\InferGeneric] callable use the layout-1 companion.
+$resolved = Generic::bind(\Tyhp\Promise::resolved(...), T::int)(1);
 ```
 
 ## Object `with` helper: `\Tyhp\ObjectHelper`
@@ -1463,15 +1514,18 @@ interface ArrayAccessShape<TStruct extends struct> extends \ArrayAccess<__IndexK
     public function offsetExists(#[\Tyhp\PhpType('mixed')] __IndexKeys<TStruct> $offset): bool;
 
     #[\Tyhp\PhpType('mixed')]
-    public function offsetGet<TKey extends __IndexKeys<TStruct>>(#[\Tyhp\PhpType('mixed')] TKey $offset): __IndexValueType<TStruct, TKey>;
+    public function offsetGet(#[\Tyhp\PhpType('mixed')] __IndexKeys<TStruct> $offset): __IndexValueTypes<TStruct>;
 
-    public function offsetSet<TKey extends __IndexKeys<TStruct>>(#[\Tyhp\PhpType('mixed')] TKey $offset, #[\Tyhp\PhpType('mixed')] __IndexValueType<TStruct, TKey> $value): void;
+    public function offsetSet(
+        #[\Tyhp\PhpType('mixed')] __IndexKeys<TStruct> $offset,
+        #[\Tyhp\PhpType('mixed')] __IndexValueTypes<TStruct> $value,
+    ): void;
 
     public function offsetUnset(#[\Tyhp\PhpType('mixed')] __IndexKeys<TStruct> $offset): void;
 }
 ```
 
-The `#[\Tyhp\PhpType('mixed')]` attributes keep the emitted PHP signatures compatible with `\ArrayAccess`; implementors inherit them. Call sites must index with a key literal. The rules for implementing `offsetGet` and `offsetSet` (per-key coverage, `TYHP4331`–`TYHP4333`) are on [New and Changed Types](tyhp_0150_newTypes.md#the-tyhpcontractsarrayaccessshapetstruct-type).
+`offsetGet` and `offsetSet` are not generic. The key is `__IndexKeys<TStruct>` and the value is `__IndexValueTypes<TStruct>`. The `#[\Tyhp\PhpType('mixed')]` attributes keep the emitted PHP signatures compatible with `\ArrayAccess`; implementors inherit them. Call sites must index with a key literal. The rules for implementing `offsetGet` and `offsetSet` (per-key coverage, `TYHP4331`–`TYHP4333`) are on [New and Changed Types](tyhp_0150_newTypes.md#the-tyhpcontractsarrayaccessshapetstruct-type).
 
 ## Attributes
 
@@ -1508,33 +1562,16 @@ Marks a free function or concrete static method whose return is a type guard (`f
 Opts a generic-typed property, promoted constructor parameter, or every generic-typed property of a class out of runtime property type checks. A class with generic-typed properties is otherwise tracked at runtime so writes are checked against the bound type argument. Uses of `typeof(T)`, `default(T)`, `is T`, `new T()`, or forwarded type arguments still force tracking. Not inherited. Not valid on methods or functions (`TYHP4345`). Compile-time only. See [Generics](tyhp_0500_generics.md).
 :::
 
-### `#[\Tyhp\AllowUnset]`
-
-:::member[#[\Tyhp\AllowUnset]]
-Allows `unset($this->prop)` on a typed property or promoted constructor parameter. Without it, unsetting a typed property is an error (`TYHP4158`), because PHP returns the property to the uninitialized state. With it, the checker treats the property as possibly uninitialized when an instance method starts, so guard reads with `isset()` or `??` (`TYHP4157` otherwise). When "no value" and `null` mean the same thing, declare `?T $prop = null` instead. This attribute is kept in the emitted PHP.
-:::
-
-```tyhp
-<?tyhp
-
-final class Profile {
-    #[\Tyhp\AllowUnset]
-    public string $cachedName;
-
-    public function __construct(string $name) {
-        $this->cachedName = $name;
-    }
-
-    public function forget(): void {
-        unset($this->cachedName);
-    }
-}
-```
-
 ### `#[\Tyhp\GenericRuntime]`
 
 :::member[#[\Tyhp\GenericRuntime(bool $erased = false, ?string $binder = null, ?string $factory = null, ?string $aliasFactory = null, array<int> $layouts = [1], ?string $compiler = null)]]
-The compiler stamps this attribute on every generic class, method, and function it emits; you do not write it (an authored one is overwritten, `TYHP4346`). It is kept in the emitted PHP so `\Tyhp\Generic::bind` can find the declaration's factory or binder at runtime. Its readonly public properties describe the declaration: `erased` (no runtime helpers were emitted), `binder` (generic method or function helper), `factory` (generic class helper), `aliasFactory` (the `\Tyhp\Type` factory of a type alias), `layouts` (supported binding layouts; this runtime supports `1`), and `compiler` (the compiler version, for diagnostics only).
+The compiler stamps this attribute on every generic class, method, and function it emits; you do not write it (an authored one is overwritten, `TYHP4346`). It is kept in the emitted PHP so `\Tyhp\Generic::bind` can find the declaration's factory or binder at runtime. Its readonly public properties describe the declaration: `erased` (no runtime helpers were emitted), `binder` (the layout-2 method's own name, or the layout-1 `name__tyhpGeneric` companion), `factory` (the layout-1 class factory), `aliasFactory` (the `\Tyhp\Type` factory of a type alias), `layouts` (this runtime binds `1` and `2`), and `compiler` (the compiler version, for diagnostics only). An erased callable, a class, and a type alias are `layouts: [1]`. A non-erased callable that is not `#[\Tyhp\InferGeneric]` is `layouts: [2]`.
+:::
+
+### `#[\Tyhp\InferGeneric]`
+
+:::member[#[\Tyhp\InferGeneric]]
+On a generic function or method, every type parameter comes from the arguments. The declared name keeps the value signature. A call that passes type arguments, and `Generic::bind`, uses the `name__tyhpGeneric` companion stamped `layouts: [1]`; an erased callable has no companion. A type parameter no argument can supply is TYHP4407. A by-reference parameter is not a source. On a declaration with no type parameters the attribute is warning TYHP4408.
 :::
 
 ### `#[\Tyhp\NoEmit]`
@@ -1654,7 +1691,7 @@ The following public types exist so that emitted PHP can implement Tyhp features
 |------|---------|
 | `\Tyhp\PropertyAccessor<TValue>`, `\Tyhp\PropertyAccessorObject`, `\Tyhp\PropertyBackingCell` | Polyfill for PHP 8.4 property hooks (`get` / `set`, asymmetric visibility, `final` hooks, `parent::$prop::get()`) when `output.phpVersion` is below 8.4. |
 | `\Tyhp\GenericObject` | Per-instance record of the type arguments a tracked generic object was constructed with; backs `typeof(T)`, `default(T)`, and generic property checks inside the class. |
-| `\Tyhp\Concerns\HasGenerics` | Adds the `$__tyhpGeneric` property that holds a `GenericObject`. |
+| `\Tyhp\Concerns\HasGenerics` | Adds the layout-1 generic-argument bag (`$__tyhpGeneric`, a `GenericObject`). |
 | `\Tyhp\Concerns\HasPropertyAccessors`, `UsesPropertyAccessors` | Add the `$__tyhpPropertyHook` property that holds a `PropertyAccessorObject`. |
 | `\Tyhp\Concerns\HandlesGet`, `HandlesSet`, `HandlesIsset`, `HandlesUnset` | Dispatch `__get`, `__set`, `__isset`, and `__unset` to registered handlers. |
 | `\Tyhp\Concerns\BootsTraits` | Runs each trait's `__bootTrait_*` initializer once per instance. |
@@ -1762,3 +1799,4 @@ Prefer `Json::decode<T>()` or `$json->jsonDecodeAs<T>()` over `$json->jsonDecode
 - [The with Keyword](tyhp_2200_withKeyword.md) — `\Tyhp\ObjectHelper::with`
 - [Composer Runtime Packages](project_composerPackages.md) and [CLI: Composer](cli_composer.md) — versions, `extra.tyhp.require`, the plugin
 - [Runtime packages overview](package_intro.md), [tyhp/async](package_async.md), [tyhp/decimal](package_decimal.md), [tyhp/lambda](package_lambda.md)
+- [tyhp/core for PHP](php_package_core.md) — calling this package from PHP

@@ -9,7 +9,7 @@ status:
 Tyhp allows you to define custom behavior for operators on classes, enums, traits, and interfaces. Operator overloads enable intuitive syntax like $a + $b where $a and $b are object instances. The compiler rewrites operator usage into method calls in the PHP output. Operator overloads can be declared on classes, enums, traits, and interfaces (the same class statement list). Structs cannot declare operators — struct bodies are properties only. Trait methods that use an operator on `$this` emit `static::__add` (and the matching `__*` name) so the composing class's overload late-binds.
 
 :::note
-Every operator overload compiles to a STATIC method, with a single exception: convert's to-form __to{T}() is an INSTANCE method so it can satisfy PHP's \Stringable and the \Tyhp\Contracts\*Convertible instance interfaces. Multiple forms of the same operator collapse into ONE method whose operands and return use union types; that method dispatches internally on the runtime operand types and throws \Tyhp\Exceptions\InvalidParametersForOperatorOverloadException for a combination no form accepts. The generated method name is reserved — declaring an operator forbids a hand-written method of the same name.
+Every operator overload compiles to a STATIC method, with a single exception: convert's to-form __to{T}() is an INSTANCE method so it can satisfy PHP's \Stringable and the \Tyhp\Contracts\*Convertible instance interfaces. Multiple forms of the same operator collapse into ONE method whose operands and return use union types; that method dispatches internally on the runtime operand types and throws \Tyhp\Exceptions\InvalidParametersForOperatorOverloadException for a combination no form accepts. The generated method name is reserved — declaring an operator forbids a hand-written method of the same name. `__tyhpDefault` is reserved whether or not `operator default` is declared, in any letter case (TYHP4426).
 :::
 
 ## Binary Operators
@@ -337,7 +337,7 @@ class Point
 
 ## Abstract and Final Operators
 
-Operator overloads support abstract and final. An abstract operator introduces an abstract generated method that a subclass's operator satisfies; a final operator cannot be overridden.
+Operator overloads support abstract and final. An abstract operator introduces an abstract generated method that a subclass's operator satisfies; a final operator cannot be overridden. An abstract `operator default` is rejected (TYHP4423).
 
 ```tyhp
 <?tyhp
@@ -512,9 +512,53 @@ Convert other type to self. Method: static __from($from): self
 Convert self to other type. Instance method __to{T}(): T (e.g. __toInt, __toFloat, __toString, __toBool, __toDecimal); auto-adds the matching *Convertible interface
 :::
 
+:::member[default]
+Value of `default(ThatType)` for a class or enum. No parameters. Return type `self`. Method: public static `__tyhpDefault(): static`. See [operator default](#operator-default).
+:::
+
+## operator default
+
+A class or enum declares the value `default(ThatType)` produces. Call-site rules are on [Compile-Time Constructs](tyhp_2700_compileTimeConstructs.md).
+
+```tyhp
+<?tyhp
+
+class Money {
+    public function __construct(public readonly int $amount = 0) {}
+
+    operator default(): self {
+        return new self(0);
+    }
+}
+```
+
+```php
+<?php
+
+class Money {
+    public function __construct(public readonly int $amount = 0) {}
+
+    public static function __tyhpDefault(): static {
+        return new self(0);
+    }
+}
+```
+
+`default(Money)` then has type `Money` and emits `\Money::__tyhpDefault()`.
+
+- No parameters. The return type is `self`. At most one per class or enum. The body is static: `$this` is TYHP4097.
+- A return type other than `self` is TYHP4420. A parameter is TYHP4421. A second declaration is TYHP4422.
+- An interface, abstract class, trait, extension, or abstract operator is TYHP4423.
+- The operator is not inherited. `default(Child)` is null unless `Child` itself declares it.
+- `default(self)` and `default(static)` follow the enclosing class or enum. With the operator they have that type. Without it they are null.
+- Each call evaluates the body. An author who wants one shared instance returns that instance from the body.
+- With the operator, the call is not a constant expression, so it cannot be a property initializer or a parameter default (TYHP4090). Without the operator, `default(Class)` is null, including in a constant context.
+- The body must not evaluate `default` of the same type (TYHP4424). Constructing that type while omitting a constructor parameter whose default is `default` of that type is rejected as well (TYHP4425).
+- `__tyhpDefault` is a reserved method name in any letter case, whether or not the class declares the operator (TYHP4426). Hand-written PHP may declare `public static function __tyhpDefault(): static` on that class; `\Tyhp\Type::defaultValue()` calls it when that exact type declares the method. `default(T)` for a generic type parameter goes through `Type::defaultValue()`, so a binding to a class that declares the method produces the instance at runtime, and a binding to a class that does not produces null.
+
 ## Reserved Names
 
-Generated operator method names are reserved. If a class declares an operator and also hand-writes a method with the generated name (e.g. operator + and __add), it is a compile-time error. Names are reserved only when the corresponding operator is declared, so a class without a convert(self): string may still hand-write __toString.
+Generated operator method names are reserved. If a class declares an operator and also hand-writes a method with the generated name (e.g. operator + and __add), it is a compile-time error. Those names are reserved only when the corresponding operator is declared, so a class without a convert(self): string may still hand-write __toString. `__tyhpDefault` is reserved whether or not `operator default` is declared, in any letter case (TYHP4426).
 
 ## Resolution Order
 
@@ -558,7 +602,7 @@ Do not create binary operators where neither operand is self — at least one si
 :::
 
 :::danger
-Do not hand-write a method whose name collides with a declared operator's generated name — the name is reserved.
+Do not hand-write a method whose name collides with a declared operator's generated name — the name is reserved. `__tyhpDefault` is reserved even when the class does not declare `operator default`, in any letter case (TYHP4426).
 :::
 
 :::danger
@@ -575,7 +619,9 @@ Do not rename an extension operator with `as` — that is `TYHP4170`. Hide it or
 - Defining operator overloads on structs.
 - Binary operator where neither operand is self.
 - Unary operator where the operand is not self.
-- A hand-written method conflicting with a declared operator's reserved generated name.
+- A hand-written method conflicting with a declared operator's reserved generated name. A method named `__tyhpDefault` in any letter case (TYHP4426).
+- `operator default` with a parameter, a return type other than `self`, a second declaration, or on an interface, trait, abstract class, extension, or as an abstract operator (TYHP4420–TYHP4423).
+- `operator default` evaluating `default` of the same type, including through an omitted constructor parameter whose default is that call (TYHP4424, TYHP4425).
 - Two forms of the same operator that are not mutually distinguishable.
 - The convert operator with both parameter and return type as self.
 - A decimal convert target when tyhp/decimal is not a project dependency.

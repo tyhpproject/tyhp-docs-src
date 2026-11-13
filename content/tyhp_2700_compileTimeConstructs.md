@@ -84,14 +84,22 @@ function validateAge(int $age): void {
 
 // ORM/serialization example
 class UserQuery {
-    public function orderBy(string $field): self {
+    public function orderBy(__PropertyName<User> $field): self {
         $this->orderField = $field;
         return $this;
     }
 }
 
-// Refactoring-safe field reference:
+// Refactoring-safe field reference. nameof(User::$name) is __PropertyName<User>.
 $query->orderBy(nameof(User::$name)); // 'name'
+
+#[\Attribute(\Attribute::TARGET_CLASS)]
+class Label<T> {
+    public function __construct(public __PropertyName<T> $property) {}
+}
+
+#[Label<User>(nameof(User::$name))]
+class Profile {}
 ```
 
 ```php
@@ -106,6 +114,14 @@ function validateAge(int $age): void {
 }
 
 $query->orderBy('name');
+
+#[\Attribute(\Attribute::TARGET_CLASS)]
+class Label {
+    public function __construct(public string $property) {}
+}
+
+#[Label('name')]
+class Profile {}
 ```
 
 :::tip
@@ -152,7 +168,7 @@ if (\Tyhp\Type::is($value, \Tyhp\Type::string())) {
     echo 'Value is a string';
 }
 
-return ($this->__tyhpGeneric->resolvedType(\Repository::class, 'T'));
+return ($this->__tyhpGeneric->resolvedType(\Repository::class, 'T')); // layout-1 class bag
 ```
 
 `typeof(UserId)` and `UserId()` emit the same factory call. `typeof(Optional<int>)` is how to spell a generic alias as a Type value; `Optional(typeof(int))` is the factory with a `\Tyhp\Type` argument. `Optional<int>()` is invalid.
@@ -161,7 +177,75 @@ Inspect a **value** with `\Tyhp\Type::of($value)`, not `typeof`.
 
 ## default() — Get Default Value for a Type
 
-The default() construct returns the default value for a given type. The argument must be a valid type name. The result is a constant value emitted directly into the PHP output. This is particularly useful in generic contexts where you need a type-appropriate zero value, or when initializing variables with sensible defaults.
+The default() construct returns the default value for a given type. The argument must be a valid type name. Scalar, array, and nullable defaults are constants written into the PHP output. A class or enum default is null, and that null is a constant, unless that exact type declares `operator default()`.
+
+A class or enum may declare the value `default(ThatType)` produces:
+
+```tyhp
+<?tyhp
+
+class Money {
+    public function __construct(public readonly int $amount = 0) {}
+
+    operator default(): self {
+        return new self(0);
+    }
+}
+
+enum Color {
+    case None;
+    case Red;
+
+    operator default(): self {
+        return self::None;
+    }
+}
+
+Money $m = default(Money);
+Color $c = default(Color);
+```
+
+```php
+<?php
+
+class Money {
+    public function __construct(public readonly int $amount = 0) {}
+
+    public static function __tyhpDefault(): static {
+        return new self(0);
+    }
+}
+
+enum Color {
+    case None;
+    case Red;
+
+    public static function __tyhpDefault(): static {
+        return self::None;
+    }
+}
+
+$m = \Money::__tyhpDefault();
+$c = \Color::__tyhpDefault();
+```
+
+The operator takes no parameters and its return type is `self`. A class or enum declares it at most once. The body is static: `$this` is TYHP4097. A return type other than `self` is TYHP4420, a parameter is TYHP4421, and a second declaration is TYHP4422. An interface, abstract class, trait, extension, or abstract operator is TYHP4423. Declaration rules are also on [Operator Overloads](tyhp_1600_operatorOverloads.md#operator-default).
+
+With the operator, `default(ThatType)` has that type and emits `ThatType::__tyhpDefault()`, a public static method whose return type is `static`. Each call evaluates the body. An author who wants one shared instance returns that instance from the body.
+
+That call is not a constant expression, so it cannot be a property initializer or a parameter default (TYHP4090).
+
+The operator is not inherited. `default(Child)` is null unless `Child` itself declares the operator.
+
+`default(self)` and `default(static)` follow the enclosing class or enum under those same rules. With the operator they have that type. Without the operator they are null.
+
+Without the operator, `default(Class)` is null, including in a constant context such as a property initializer or a parameter default. Assigning that null to a non-nullable target is a type error.
+
+`default(T)` for a generic type parameter calls `\Tyhp\Type::defaultValue()`. A binding to a class that declares `__tyhpDefault` produces the instance at runtime. A binding to a class that does not produces null. Hand-written PHP may declare `public static function __tyhpDefault(): static` on that class. `Type::defaultValue()` calls that method when the exact type declares it, and returns null when the method is only inherited or absent.
+
+The operator body must not evaluate `default` of the same type (TYHP4424). Constructing that type while omitting a constructor parameter whose default is `default` of that type is rejected as well (TYHP4425). A method named `__tyhpDefault`, in any letter case, is reserved whether or not the class declares the operator (TYHP4426).
+
+Scalar and generic uses:
 
 ```tyhp
 <?tyhp
@@ -179,7 +263,7 @@ array $a = default(array);     // []
 ?int $ni = default(?int);      // null
 ?string $ns = default(?string); // null
 
-// Object types default to null
+// A class that does not declare operator default() — null, and a constant
 ?User $u = default(User);      // null
 
 // Source type alias — emits UserId()->defaultValue()
@@ -248,7 +332,11 @@ Returns null for any nullable type
 :::
 
 :::member[default(ClassName)]
-Returns null for any object/class type
+Null when that class or enum does not declare `operator default()`. The null is a constant. `default(self)` and `default(static)` follow the enclosing class or enum the same way.
+:::
+
+:::member[operator default(): self]
+The value `default(ThatType)` produces. The call has that type and emits `ThatType::__tyhpDefault()`. Each call evaluates the body. The call is not a constant expression. A subclass does not inherit a parent's operator.
 :::
 
 ## variable_exists() — Compile-Time Variable Existence Check
@@ -310,7 +398,7 @@ Beyond the four compile-time constructs above, Tyhp has several other features t
 
 - Type aliases (`type MyType = int|string`) — hints expand to the underlying type with no runtime trace. A source `.tyhp` alias *declaration* also emits a `\Tyhp\Type` factory (`UserId()`, `Optional(\Tyhp\Type::int())`) so PHP and `typeof` can name it at runtime. Tyhpdef aliases inline unless they carry `#[\Tyhp\GenericRuntime(aliasFactory: …)]`. See [Type Aliases](tyhp_0700_typeAliases.md).
 - Structs — compiled to PHP associative arrays. Struct declarations are erased; struct property access compiles to array key access.
-- Generics — type parameters are erased from PHP signatures. Tracking (`HasGenerics`, factories, binders) is emitted only when the bound type is used at runtime or a generic-typed property remains. Every emitted generic class/method/function is stamped `#[\Tyhp\GenericRuntime]`. Foreign compiled-library sites use `\Tyhp\Generic::bind`; PHP / `typeof` interop for aliases still uses `aliasFactory` (not `bind`). See [Generics](tyhp_0500_generics.md).
+- Generics — type parameters are erased from PHP signatures. Tracking (`HasGenerics`, the layout-1 class factory, layout-2 binders) is emitted only when the bound type is used at runtime or a generic-typed property remains. Every emitted generic class, method, and function is stamped `#[\Tyhp\GenericRuntime]`. A layout-2 method emits `name(types)(args)`. `#[\Tyhp\InferGeneric]` keeps the plain call and a `name__tyhpGeneric` companion. A Tyhp `new` of a foreign class emits `\Tyhp\Generic::bind`. PHP / `typeof` interop for aliases still uses `aliasFactory`. See [Generics](tyhp_0500_generics.md).
 - Static value types (__ClassName, __FunctionName, etc.) — compile-time string subtypes that are erased to plain string in PHP output.
 - Type guard return types ($param is Type) — compiled to bool return type in PHP output. The type narrowing information is used only by the checker.
 - Function and method overload signatures — only the implementation body is emitted to PHP (for an interface or `abstract` method, the last signature). Overload signatures are compile-time declarations that callers are checked against. See [Function and Method Overloads](tyhp_1200_functionOverloads.md).
@@ -351,6 +439,14 @@ Using default() with non-nullable union types other than nullable. Only nullable
 :::
 
 :::danger
+Using `default(Money)` as a property initializer or parameter default when `Money` declares `operator default`. That call is not a constant expression (TYHP4090). Without the operator, `default(Money)` is null and is a constant.
+:::
+
+:::danger
+Evaluating `default(Money)` inside `Money`'s `operator default` body (TYHP4424). Constructing `Money` while omitting a constructor parameter whose default is `default(Money)` is the same cycle (TYHP4425).
+:::
+
+:::danger
 Passing an unresolvable symbol reference to nameof(). The argument must refer to a declared symbol in scope. Using nameof($nonExistentVar) or nameof(NonExistentClass) produces a compiler error.
 :::
 
@@ -381,5 +477,5 @@ bool $exists = variable_exists($existingVar); // true
 ```
 
 :::note
-All four compile-time constructs (nameof, typeof, default, variable_exists) are resolved during compilation. They add zero runtime overhead — the PHP output contains only the resolved constant values or simple function calls.
+nameof(), typeof(), and variable_exists() are resolved during compilation. default() of a scalar, an array, a nullable type, or a class or enum that does not declare `operator default()` is a constant. default() of a class or enum that declares the operator is a call to `__tyhpDefault()`, and each call runs the body.
 :::
